@@ -8,10 +8,9 @@
 # Without them the Mac build is still made, with a throwaway (ad hoc) signature.
 name: Release
 
-# Manual only for now: releases are built and signed outside GitHub until the
-# MAC_SIGN_CERT / MAC_SIGN_KEY secrets are added. Once they are, switch this
-# back to `push: tags: ['v*']` so a pushed tag builds and publishes everything.
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:

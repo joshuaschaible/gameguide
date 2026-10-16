@@ -33,9 +33,13 @@ The product name, link scheme, app ID and GitHub repo live in `app/brand.json`; 
 
 ## Releasing
 
-Bump `version` in `app/package.json`, commit, build with `npm run package`, sign the Mac app, zip both as `Game-Guide-Windows-v<version>.zip` / `Game-Guide-Mac-v<version>.zip`, and publish a GitHub release tagged `v<version>` with those two files. Installed copies pick it up within a couple of minutes.
+Bump `version` in `app/package.json`, commit, then:
 
-`.github/workflows/release.yml` can do all of this on GitHub's machines (run it from the Actions tab); once the signing secrets below are added it can be switched to run on every pushed tag. The Mac build is signed with a self-signed certificate stored in the `MAC_SIGN_CERT` / `MAC_SIGN_KEY` repo secrets so macOS keeps its permissions across updates.
+```sh
+git tag v1.5.1 && git push --tags
+```
+
+GitHub Actions (`.github/workflows/release.yml`) builds both apps, signs the Mac app with the certificate in the `MAC_SIGN_CERT` / `MAC_SIGN_KEY` repo secrets (so macOS keeps its permissions across updates), and publishes the release. Installed copies pick it up within a couple of minutes. It can also be run by hand from the Actions tab.
 
 The invite page (`site/join/`) is published to GitHub Pages by `.github/workflows/pages.yml`.
 
