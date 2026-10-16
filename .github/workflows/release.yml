@@ -1,0 +1,100 @@
+# Builds the Windows and Mac apps on GitHub's machines and publishes a
+# release whenever a version tag is pushed (git tag v1.5.1 && git push --tags).
+# The in-app updater picks the release up automatically.
+#
+# Secrets (Settings > Secrets and variables > Actions):
+#   MAC_SIGN_CERT  contents of gameguide-signing.crt  (homemade Mac certificate)
+#   MAC_SIGN_KEY   contents of gameguide-signing.key
+# Without them the Mac build is still made, with a throwaway (ad hoc) signature.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+          - os: macos-14
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install tools
+        run: npm install --no-audit --no-fund
+      - name: Install app dependencies
+        working-directory: app
+        run: npm install --omit=dev --no-audit --no-fund
+      - name: Package
+        run: node scripts/package.mjs ${{ matrix.platform }}
+      - name: Read name and version
+        id: meta
+        shell: bash
+        run: |
+          echo "name=$(node -p "require('./app/brand.json').name")" >> "$GITHUB_OUTPUT"
+          echo "prefix=$(node -p "require('./app/brand.json').name.replace(/\\s+/g,'-')")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./app/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Sign (Mac)
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          MAC_SIGN_CERT: ${{ secrets.MAC_SIGN_CERT }}
+          MAC_SIGN_KEY: ${{ secrets.MAC_SIGN_KEY }}
+        run: |
+          APP="dist/${{ steps.meta.outputs.name }}-darwin-arm64/${{ steps.meta.outputs.name }}.app"
+          if [ -n "$MAC_SIGN_CERT" ] && [ -n "$MAC_SIGN_KEY" ]; then
+            curl -sSL -o rc.tgz https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-macos-universal.tar.gz
+            tar xzf rc.tgz
+            RC=$(find . -name rcodesign -type f | head -1)
+            printf '%s' "$MAC_SIGN_CERT" > cert.pem
+            printf '%s' "$MAC_SIGN_KEY" > key.pem
+            "$RC" sign --timestamp-url none --pem-file cert.pem --pem-file key.pem "$APP"
+            rm -f cert.pem key.pem
+          else
+            codesign --force --deep --sign - "$APP"
+          fi
+          mkdir -p release
+          ditto -c -k --keepParent "$APP" "release/${{ steps.meta.outputs.prefix }}-Mac-v${{ steps.meta.outputs.version }}.zip"
+
+      - name: Zip (Windows)
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          $name = "${{ steps.meta.outputs.name }}"
+          New-Item -ItemType Directory -Force release | Out-Null
+          Rename-Item "dist/$name-win32-x64" "$name"
+          Compress-Archive -Path "dist/$name" -DestinationPath "release/${{ steps.meta.outputs.prefix }}-Windows-v${{ steps.meta.outputs.version }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}
+          path: release/*.zip
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./app/package.json').version")
+          NAME=$(node -p "require('./app/brand.json').name")
+          gh release create "v$VERSION" release/*.zip --title "$NAME v$VERSION" --generate-notes

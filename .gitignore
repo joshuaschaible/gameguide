@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+*.zip
+.DS_Store
+*.pem
+*.key
+*.p12

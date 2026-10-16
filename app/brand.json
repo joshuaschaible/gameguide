@@ -1,0 +1,11 @@
+{
+  "name": "Game Guide",
+  "id": "gameguide",
+  "appId": "com.madebyfoundation.gameguide",
+  "company": "Foundation Studio",
+  "github": {
+    "owner": "joshuaschaible",
+    "repo": "gameguide"
+  },
+  "inviteBase": ""
+}

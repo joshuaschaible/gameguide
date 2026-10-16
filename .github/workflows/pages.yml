@@ -1,0 +1,42 @@
+# Publishes the invite page (site/) to GitHub Pages, with the product name and
+# link scheme filled in from app/brand.json.
+name: Invite page
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'app/brand.json', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fill in name and link scheme
+        run: |
+          node -e "
+            const fs = require('fs');
+            const b = require('./app/brand.json');
+            const f = 'site/join/index.html';
+            const s = fs.readFileSync(f, 'utf8').replace(/var BRAND = \{[^}]*\};/, 'var BRAND = ' + JSON.stringify({ name: b.name, scheme: b.id }) + ';');
+            fs.writeFileSync(f, s);
+          "
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

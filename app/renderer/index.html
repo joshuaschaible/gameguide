@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' https: wss: ws: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'none'">
+  <title></title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark">+</span> <span data-brand></span></div>
+  <div class="top-right">
+    <div id="chips" class="chips" aria-label="Who's here"></div>
+    <button id="end" class="danger small" hidden>End session</button>
+    <button id="open-settings" class="icon-btn" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="update-bar" class="update-bar" hidden>
+  <span id="update-text"></span>
+  <button id="update-btn" class="primary small">Update now</button>
+  <button id="update-dismiss" class="link">Later</button>
+</div>
+
+<main id="main">
+  <!-- 1. name -->
+  <section id="step-name" class="step">
+    <p class="eyebrow">Let's play</p>
+    <h1>What's your gamer tag?</h1>
+    <form id="name-form" class="row">
+      <input id="name" type="text" maxlength="24" placeholder="Gamer tag" autocomplete="off" spellcheck="false" required>
+      <button class="primary" type="submit">Next →</button>
+    </form>
+    <p class="note pick-label">Pick an avatar, or upload a photo. Your friend sees it next to your name.</p>
+    <div id="avatar-picker-name"></div>
+  </section>
+
+  <!-- 2. role -->
+  <section id="step-role" class="step" hidden>
+    <p class="eyebrow">Pick your part</p>
+    <h1>What do you want to do?</h1>
+    <p id="role-note" class="note" hidden></p>
+    <div class="cards">
+      <button id="go-share" class="card">
+        <span class="card-icon">🎮</span>
+        <strong>Share my game</strong>
+        <span>I'm playing. My friend watches and draws on my screen.</span>
+      </button>
+      <button id="go-join" class="card">
+        <span class="card-icon">✏️</span>
+        <strong>Join a friend</strong>
+        <span>I have a code. I'll watch and point things out.</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- 3a. pick screen -->
+  <section id="step-pick" class="step" hidden>
+    <p class="eyebrow">Share my game</p>
+    <h1>What do you want to share?</h1>
+    <p class="note">Pick your game to share just that window, or share a whole screen. You can switch any time.</p>
+    <div id="perm" class="warn" hidden>
+      <p><b>Screen Recording permission needed.</b> In System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, turn on <b><span data-brand></span></b>, then quit and reopen <span data-brand></span>.</p>
+      <button id="open-perm" class="ghost small">Open System Settings</button>
+    </div>
+    <div id="sources" class="sources"></div>
+    <div class="row gap">
+      <button id="pick-back" class="ghost">← Back</button>
+      <button id="pick-refresh" class="ghost">Refresh</button>
+    </div>
+  </section>
+
+  <!-- 3b. sharing -->
+  <section id="step-share" class="step" hidden>
+    <p class="eyebrow">Sharing your screen</p>
+    <h1 id="share-title">Send this code to your friend</h1>
+    <div class="source-row">
+      <span id="source-name" class="source-name"></span>
+      <button id="change-source" class="ghost small">Change source</button>
+      <button id="restart-stream" class="ghost small" title="Fresh capture + fresh video connection. Your friend stays connected.">🔄 Restart stream</button>
+    </div>
+    <p id="track-note" class="note track-note"></p>
+    <div class="code-box">
+      <div id="code" class="code">······</div>
+      <div class="code-actions">
+        <button id="copy-invite" class="primary" title="Copies a message with a link. Paste it in Discord, a text, anywhere.">Copy invite link</button>
+        <button id="copy-code" class="ghost small">Copy code only</button>
+      </div>
+    </div>
+    <p id="share-status" class="status">Starting…</p>
+    <div class="row gap">
+      <button id="return-game" class="ghost">Return to game</button>
+      <button id="test-draw" class="ghost" title="Draws a sample mark on your screen so you can check it shows up on top of your game">✏️ Test drawing</button>
+    </div>
+    <div class="quality">
+      <p class="hotkeys-title">Video quality <span class="note">(changes apply right away)</span></p>
+      <div class="q-grid">
+        <label>Resolution
+          <select id="q-res">
+            <option value="native">Native (full)</option>
+            <option value="1440">1440p</option>
+            <option value="1080">1080p</option>
+            <option value="900">900p</option>
+            <option value="720">720p</option>
+          </select>
+        </label>
+        <label>Frame rate
+          <select id="q-fps">
+            <option value="60">60 fps</option>
+            <option value="30">30 fps</option>
+            <option value="15">15 fps</option>
+          </select>
+        </label>
+      </div>
+      <details class="more-quality">
+        <summary>More options</summary>
+        <div class="q-grid">
+        <label>Max quality (bitrate)
+          <select id="q-mbps">
+            <option value="4">Low (slow internet)</option>
+            <option value="8">Medium</option>
+            <option value="12">High (recommended)</option>
+            <option value="20">Very high</option>
+            <option value="30">Max (same Wi-Fi / wired)</option>
+          </select>
+        </label>
+        <label>When the network struggles
+          <select id="q-prefer">
+            <option value="balanced">Balanced (recommended)</option>
+            <option value="sharp">Keep it sharp</option>
+            <option value="smooth">Keep it smooth</option>
+          </select>
+        </label>
+        <label>Video format
+          <select id="q-codec">
+            <option value="h264">Fast (H.264, recommended)</option>
+            <option value="vp9">Sharper text (VP9, more CPU)</option>
+            <option value="vp8">Most compatible (VP8)</option>
+            <option value="auto">Automatic</option>
+          </select>
+        </label>
+        </div>
+        <p id="q-stats" class="q-stats"></p>
+        <p id="q-pipe" class="q-stats q-pipe"></p>
+      </details>
+      <p id="q-hint" class="warn-inline"></p>
+    </div>
+    <label class="check-row"><input id="sound" type="checkbox" checked> Play a sound when your friend draws</label>
+    <p id="overlay-hidden" class="warn-inline" hidden>Drawings are hidden. Press <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> to show them again.</p>
+    <div class="hotkeys">
+      <p class="hotkeys-title">In-game hotkeys</p>
+      <p><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> clear marks · <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> hide/show marks · <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> sound on/off</p>
+    </div>
+    <p class="note small-note">Keep <span data-brand></span> open while you play. Drawings appear over fullscreen games and fade after 4 seconds; your mouse and keyboard still go to the game. If a game hides the drawings, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b> in its video settings. You'll still hear the sound cue either way.</p>
+  </section>
+
+  <!-- 3c. join -->
+  <section id="step-join" class="step" hidden>
+    <p class="eyebrow">Join a friend</p>
+    <h1>Enter your friend's code</h1>
+    <form id="join-form" class="row">
+      <input id="join-code" type="text" maxlength="12" placeholder="ABC123" autocomplete="off" spellcheck="false" class="code-input" required>
+      <button id="join-btn" class="primary" type="submit">Join →</button>
+    </form>
+    <p id="join-status" class="status"></p>
+    <div class="row gap">
+      <button id="join-back" class="ghost">← Back</button>
+    </div>
+  </section>
+
+  <!-- 4. watch -->
+  <section id="step-watch" class="watch" hidden>
+    <div class="toolbar">
+      <div class="tools">
+        <button class="tool active" data-tool="pen" title="Pen (P)">✏️ Pen</button>
+        <button class="tool" data-tool="ping" title="Pointer (O)">📍 Pointer</button>
+        <span class="sep"></span>
+        <div class="swatches" role="group" aria-label="Color">
+          <button class="swatch active" data-color="#ff3b6b" title="Red"></button>
+          <button class="swatch" data-color="#ff8a00" title="Orange"></button>
+          <button class="swatch" data-color="#ffd23f" title="Yellow"></button>
+          <button class="swatch" data-color="#7dff5a" title="Green"></button>
+          <button class="swatch" data-color="#3bf0ff" title="Cyan"></button>
+          <button class="swatch" data-color="#3d7bff" title="Blue"></button>
+          <button class="swatch" data-color="#b26bff" title="Purple"></button>
+          <button class="swatch" data-color="#ff4fd8" title="Pink"></button>
+          <button class="swatch" data-color="#ffffff" title="White"></button>
+          <button class="swatch" data-color="#111111" title="Black"></button>
+          <label class="swatch custom" title="Pick any color"><input id="custom-color" type="color" value="#00ffaa" aria-label="Custom color"></label>
+        </div>
+        <span class="sep"></span>
+        <button id="clear" class="tool" title="Clear (C)">🧹 Clear</button>
+        <span class="sep"></span>
+        <button id="refresh-video" class="tool" title="Ask for a fresh video connection">🔄 Refresh video</button>
+      </div>
+      <span id="watch-status" class="watch-status"></span>
+    </div>
+    <div id="stage" class="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="draw"></canvas>
+      <div id="freeze" class="freeze" hidden></div>
+      <div id="receipt" class="receipt" hidden></div>
+    </div>
+  </section>
+</main>
+
+
+<dialog id="welcome" class="welcome">
+  <div class="slide" data-slide="0">
+    <div class="slide-icon">🎮</div>
+    <h2>Share your game</h2>
+    <p>Click <b>Share my game</b> and pick your game from the list. <span data-brand></span> puts the likely game first.</p>
+    <p>Then click <b>Copy invite link</b> and paste it to your friend in Discord or a text.</p>
+  </div>
+  <div class="slide" data-slide="1" hidden>
+    <div class="slide-icon">🔗</div>
+    <h2>Join a friend</h2>
+    <p>Got an invite link? Just click it. <span data-brand></span> opens and joins by itself.</p>
+    <p>Got a code instead? Click <b>Join a friend</b> and type the 6 letters and numbers.</p>
+  </div>
+  <div class="slide" data-slide="2" hidden>
+    <div class="slide-icon">✏️</div>
+    <h2>Draw on their game</h2>
+    <p>Use <b>Pen</b> to draw and <b>Pointer</b> to ping a spot. Your marks show up on top of their game and fade after 4 seconds.</p>
+    <p>Sharing? Click <b>Test drawing</b> to see what your friend's marks will look like.</p>
+  </div>
+  <div class="welcome-foot">
+    <div class="dots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>
+    <div class="row">
+      <button id="welcome-skip" class="ghost">Skip</button>
+      <button id="welcome-next" class="primary">Next →</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="source-dialog" class="wide">
+  <h2>Change source</h2>
+  <p class="note">Your friend stays connected and sees the new source right away.</p>
+  <div id="dialog-sources" class="dialog-sources"></div>
+  <div class="row gap end">
+    <button id="dialog-refresh" class="ghost">Refresh</button>
+    <button id="dialog-cancel" class="primary">Cancel</button>
+  </div>
+</dialog>
+
+<dialog id="details">
+  <h2>Connection details</h2>
+  <p class="note">Share this with whoever is helping you troubleshoot. It contains no codes or keys.</p>
+  <pre id="details-text"></pre>
+  <div class="row gap end">
+    <button id="details-copy" class="ghost">Copy</button>
+    <button id="details-close" class="primary">Close</button>
+  </div>
+</dialog>
+
+<dialog id="settings">
+  <h2>Settings</h2>
+  <label>Gamer tag <input id="settings-name" type="text" maxlength="24"></label>
+  <p class="note pick-label">Avatar</p>
+  <div id="avatar-picker-settings"></div>
+
+  <div class="set-section">
+    <p class="set-title">Updates</p>
+    <div class="set-row">
+      <span id="version" class="note"></span>
+      <button id="check-updates" class="ghost small">Check for updates</button>
+    </div>
+    <p id="settings-update" class="note set-status"></p>
+  </div>
+
+  <div class="set-section">
+    <p class="set-title">Help</p>
+    <div class="set-row">
+      <span class="note">Quick tour of sharing, joining and drawing.</span>
+      <button id="open-welcome" class="ghost small">How it works</button>
+    </div>
+  </div>
+
+  <div class="set-section">
+    <p class="set-title">Troubleshooting</p>
+    <div class="set-row">
+      <span class="note">Something not working? Copy this and send it to whoever is helping you.</span>
+      <div class="row">
+        <button id="copy-details" class="primary small">Copy details</button>
+        <button id="open-details" class="ghost small">View</button>
+      </div>
+    </div>
+  </div>
+
+  <details class="advanced">
+    <summary>Advanced: network</summary>
+    <p class="note">You don't need any of this. <span data-brand></span> already has a free relay for networks that block direct connections. These fields are only for people who run their own relay (TURN) server; that server has its own username and password. This is not a <span data-brand></span> login.</p>
+    <label class="check"><input id="relay-only" type="checkbox"> Always use the backup connection (slower, but works through strict firewalls)</label>
+    <label>Relay (TURN) server address <input id="turn-url" type="text" placeholder="turn:example.com:3478"></label>
+    <label>Relay username <input id="turn-user" type="text" autocomplete="off"></label>
+    <label>Relay password <input id="turn-pass" type="password" autocomplete="off"></label>
+  </details>
+  <div class="row gap end">
+    <button id="settings-cancel" class="ghost">Cancel</button>
+    <button id="settings-save" class="primary">Save</button>
+  </div>
+</dialog>
+
+<script src="peerjs.min.js"></script>
+<script src="marks.js"></script>
+<script src="profile.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

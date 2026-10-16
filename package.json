@@ -1,0 +1,18 @@
+{
+  "name": "gameguide-workspace",
+  "private": true,
+  "scripts": {
+    "setup": "npm install && cd app && npm install",
+    "start": "electron app",
+    "test": "node test/e2e.cjs",
+    "test:electron": "node test/electron-smoke.cjs",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.4.4",
+    "electron": "38.2.0",
+    "peer": "1.0.2",
+    "peerjs": "1.5.4",
+    "playwright": "1.56.0"
+  }
+}
