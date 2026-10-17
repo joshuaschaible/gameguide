@@ -264,7 +264,7 @@ function ensureOverlay() {
   overlayWin.setIgnoreMouseEvents(true);
   overlayWin.setAlwaysOnTop(true, 'screen-saver', 1);
   // Mac: join every Space, including the separate Space a fullscreen game runs in.
-  overlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  joinAllSpaces();
   // Keep the overlay out of the captured video so the friend never sees doubled marks.
   overlayWin.setContentProtection(true);
   overlayWin.loadFile(path.join(__dirname, 'renderer', 'overlay.html'));
@@ -280,6 +280,23 @@ function ensureOverlay() {
   };
   overlayWin.webContents.on('render-process-gone', (_e, d) => recover(`crashed (${d && d.reason})`));
   overlayWin.webContents.on('unresponsive', () => recover('stopped responding'));
+}
+
+// skipTransformProcessType: without it, Electron briefly turns the whole app
+// into a background-only process on every call, which removes Game Guide from
+// the Dock and Cmd+Tab (it looked closed). The overlay is a 'panel' window,
+// which floats over fullscreen apps without that switch.
+function joinAllSpaces() {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+  try {
+    overlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  } catch { /* ignore */ }
+  ensureInDock();
+}
+// Safety net: if anything left the app background-only, bring it back.
+function ensureInDock() {
+  if (!isMac || !app.dock) return;
+  try { if (typeof app.dock.isVisible === 'function' && !app.dock.isVisible()) app.dock.show(); } catch { /* ignore */ }
 }
 
 function sendLog(line) {
@@ -325,7 +342,7 @@ function placeOverlay(bounds) {
     overlayWin.showInactive();
     overlayWin.setAlwaysOnTop(true, 'screen-saver', 1);
     if (isWin) overlayWin.moveTop();
-    if (isMac) overlayWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    if (isMac) joinAllSpaces();
     lastZ = now;
   } else if (now - lastZ > 1000) {
     // Re-claim the top spot occasionally, not constantly.
@@ -455,6 +472,7 @@ function closeOverlay() {
   overlayActive = false;
   if (overlayWin && !overlayWin.isDestroyed()) overlayWin.close();
   overlayWin = null;
+  ensureInDock();
 }
 
 // ---------- app lifecycle ----------
