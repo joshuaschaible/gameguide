@@ -39,6 +39,51 @@ function loadWin() {
   const ABOVE_NORMAL_PRIORITY_CLASS = 0x8000;
   const GPU_PRIO = { HIGH: 4, ABOVE_NORMAL: 3 };
 
+  // Starting a helper with no console window at all. Node's spawn can't do this
+  // for detached processes (windowsHide is ignored and every console tool the
+  // script runs pops up its own black window), so we call CreateProcessW
+  // ourselves with CREATE_NO_WINDOW. The helper gets a hidden console that the
+  // tools it runs share, and it isn't tied to our lifetime.
+  let runHidden = null;
+  try {
+    const STARTUPINFOW = koffi.struct('GG_STARTUPINFOW', {
+      cb: 'uint32', lpReserved: 'void *', lpDesktop: 'void *', lpTitle: 'void *',
+      dwX: 'uint32', dwY: 'uint32', dwXSize: 'uint32', dwYSize: 'uint32',
+      dwXCountChars: 'uint32', dwYCountChars: 'uint32', dwFillAttribute: 'uint32', dwFlags: 'uint32',
+      wShowWindow: 'uint16', cbReserved2: 'uint16', lpReserved2: 'void *',
+      hStdInput: 'void *', hStdOutput: 'void *', hStdError: 'void *',
+    });
+    koffi.struct('GG_PROCESS_INFORMATION', { hProcess: 'void *', hThread: 'void *', dwProcessId: 'uint32', dwThreadId: 'uint32' });
+    const CreateProcessW = kernel32.func('int32 __stdcall CreateProcessW(const char16_t *app, const char16_t *cmdLine, void *procAttrs, void *threadAttrs, int32 inherit, uint32_t flags, void *env, const char16_t *cwd, GG_STARTUPINFOW *si, _Out_ GG_PROCESS_INFORMATION *pi)');
+    const GetLastError = kernel32.func('uint32_t __stdcall GetLastError()');
+    const CREATE_NO_WINDOW = 0x08000000;
+    const CREATE_NEW_PROCESS_GROUP = 0x00000200;
+    const CREATE_BREAKAWAY_FROM_JOB = 0x01000000;
+    const STARTF_USESHOWWINDOW = 0x1;
+
+    runHidden = function runHidden(exe, cmdLine, cwd) {
+      const si = {
+        cb: koffi.sizeof(STARTUPINFOW), lpReserved: null, lpDesktop: null, lpTitle: null,
+        dwX: 0, dwY: 0, dwXSize: 0, dwYSize: 0, dwXCountChars: 0, dwYCountChars: 0, dwFillAttribute: 0,
+        dwFlags: STARTF_USESHOWWINDOW, wShowWindow: 0 /* SW_HIDE */, cbReserved2: 0, lpReserved2: null,
+        hStdInput: null, hStdOutput: null, hStdError: null,
+      };
+      let lastErr = 0;
+      // Try to leave any job object we were started in (so the helper outlives
+      // us), and fall back if that job doesn't allow it.
+      for (const extra of [CREATE_BREAKAWAY_FROM_JOB, 0]) {
+        const pi = {};
+        if (CreateProcessW(exe, cmdLine, null, null, 0, CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | extra, null, cwd || null, si, pi)) {
+          CloseHandle(pi.hThread);
+          CloseHandle(pi.hProcess);
+          return pi.dwProcessId;
+        }
+        lastErr = GetLastError();
+      }
+      throw new Error(`CreateProcessW failed (error ${lastErr})`);
+    };
+  } catch { /* leave runHidden null; updater falls back to spawn */ }
+
   function exeForWindow(hwnd) {
     const pid = [0];
     GetWindowThreadProcessId(hwnd, pid);
@@ -54,6 +99,7 @@ function loadWin() {
   }
 
   return {
+    runHidden,
     // Where a window is and which program owns it (used to guess the game).
     meta(id) {
       const h = Number(id);
@@ -225,6 +271,13 @@ module.exports = {
     const i = get();
     if (!i || !i.boost) return 'not supported';
     try { return i.boost(pid); } catch (e) { return `failed: ${e.message}`; }
+  },
+  // Windows only: start a program with no window. Returns its pid. Throws if
+  // unavailable so callers can fall back to child_process.spawn.
+  runHidden(exe, cmdLine, cwd) {
+    const i = get();
+    if (!i || !i.runHidden) throw new Error(loadError ? String(loadError.message || loadError) : 'not supported');
+    return i.runHidden(exe, cmdLine, cwd);
   },
   windowMeta(id) {
     const i = get();

@@ -36,6 +36,9 @@ jobs:
       - name: Install app dependencies
         working-directory: app
         run: npm install --omit=dev --no-audit --no-fund
+      - name: Check hidden updater helper (Windows)
+        if: matrix.platform == 'win32'
+        run: node scripts/check-windows.cjs
       - name: Package
         run: node scripts/package.mjs ${{ matrix.platform }}
       - name: Read name and version

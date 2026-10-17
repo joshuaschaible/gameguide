@@ -172,7 +172,14 @@ function launchSwapper(current, fresh, staging, work) {
       `start "" ${q(exe)}`,
       `rmdir /S /Q ${q(work)}`,
     ].join('\r\n'));
-    spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    const cmd = process.env.ComSpec || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe');
+    try {
+      // No window at all (see native.js runHidden).
+      require('./native').runHidden(cmd, `"${cmd}" /d /s /c ""${script}""`, work);
+    } catch {
+      // Fallback: works, but Windows may show a black console window briefly.
+      spawn(cmd, ['/d', '/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    }
     return;
   }
   // macOS (and Linux test runs): plain shell.
