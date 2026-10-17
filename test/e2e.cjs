@@ -190,6 +190,37 @@ const stub = (name) => `
   await friend.waitForTimeout(5000);
   console.log('after refresh button (player log tail):', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /rebuild|refresh|friend reports/.test(l)).slice(-2))));
   console.log('friend after refresh:', await friend.textContent('#watch-status'));
+  // ---- drawing link dies, video keeps going (seen on Macs) ----
+  const drawBox = await friend.locator('#draw').boundingBox();
+  const drawAt = async (fx, fy) => {
+    await friend.click('.tool[data-tool=pen]');
+    await friend.mouse.move(drawBox.x + drawBox.width * fx, drawBox.y + drawBox.height * fy);
+    await friend.mouse.down(); await friend.mouse.move(drawBox.x + drawBox.width * (fx + 0.05), drawBox.y + drawBox.height * fy); await friend.mouse.up();
+  };
+  const starts = () => player.evaluate(() => window.__drawn.filter((m) => m.t === 'start').length);
+  console.log('heartbeat seen:', await friend.evaluate(() => window.__app.peerHb), await player.evaluate(() => window.__app.peerHb));
+  const callBefore = await player.evaluate(() => { window.__callRef = window.__app.call; return !!window.__callRef; });
+  // 1) silent death: the player stops answering on the drawing link
+  await player.evaluate(() => { window.__app.conn.send = () => {}; });
+  await friend.waitForTimeout(9000);
+  let before = await starts();
+  await friend.waitForFunction(() => window.__app.conn && window.__app.conn.open && !window.__app.relinking, null, { timeout: 15000 });
+  await drawAt(0.4, 0.4);
+  await friend.waitForTimeout(800);
+  console.log('quiet link relink:', JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /drawing link/.test(l)).slice(-3))),
+    '| mark arrived after relink:', (await starts()) > before,
+    '| same video call kept:', callBefore && await player.evaluate(() => window.__app.call === window.__callRef));
+  // 2) hard death: the drawing link's network connection is torn down
+  before = await starts();
+  await friend.evaluate(() => window.__app.conn.peerConnection.close());
+  await friend.waitForTimeout(1500);
+  await friend.waitForFunction(() => window.__app.conn && window.__app.conn.open && !window.__app.relinking, null, { timeout: 20000 });
+  await drawAt(0.5, 0.3);
+  await friend.waitForTimeout(800);
+  console.log('closed link relink:', JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /drawing link/.test(l)).slice(-2))),
+    '| player:', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /drawing link|viewer left/.test(l)).slice(-3))),
+    '| mark arrived:', (await starts()) > before,
+    '| friend still watching:', await friend.evaluate(() => !document.getElementById('step-watch').hidden));
   await player.waitForTimeout(3000);
   await player.click('#restart-stream');
   await player.waitForTimeout(5000);

@@ -132,10 +132,26 @@
     S.ended = true;
     clearTimers();
     clearInterval(S.statsTimer);
+    clearInterval(S.linkWatch);
+    stopHeartbeat();
+    clearTimeout(S.relinkTimer);
+    S.relinking = false;
+    S.relinkTries = 0;
+    S.peerHb = false;
+    S.awaitRelink = null;
     S.native = null;
     try { S.call && S.call.close(); } catch { /* ignore */ }
-    try { S.conn && S.conn.close(); } catch { /* ignore */ }
-    try { S.peer && S.peer.destroy(); } catch { /* ignore */ }
+    // Say goodbye on the drawing link (so the other side ends right away
+    // instead of trying to rebuild it), then close a moment later.
+    const conn = S.conn;
+    const peer = S.peer;
+    let bye = false;
+    try { if (conn && conn.open) { conn.send({ t: 'bye' }); bye = true; } } catch { /* ignore */ }
+    const finish = () => {
+      try { conn && conn.close(); } catch { /* ignore */ }
+      try { peer && peer.destroy(); } catch { /* ignore */ }
+    };
+    if (bye) setTimeout(finish, 300); else finish();
     if (S.stream) S.stream.getTracks().forEach((t) => t.stop());
     S.call = S.conn = S.peer = S.stream = null;
     S.playerStat = null;
@@ -182,13 +198,24 @@
       if (!pair) return null;
       const local = stats.get(pair.localCandidateId) || {};
       const remote = stats.get(pair.remoteCandidateId) || {};
+      // Which network each end uses (lan / tailscale / ipv6 ...), no full IPs.
+      const netKind = (c) => {
+        const a = String(c.address || c.ip || '');
+        if (!a) return '?';
+        if (/\.local$/i.test(a)) return 'hidden';
+        if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a) || /^fd7a:115c:a1e0/i.test(a)) return 'tailscale';
+        if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a)) return 'lan';
+        if (/^169\.254\./.test(a) || /^fe80/i.test(a)) return 'link-local';
+        return a.includes(':') ? 'ipv6' : 'public';
+      };
+      const where = (c) => `${netKind(c)}${c.networkType && c.networkType !== 'unknown' ? ` ${c.networkType}` : ''}`;
       const relayed = local.candidateType === 'relay' || remote.candidateType === 'relay';
       const lan = local.candidateType === 'host' && remote.candidateType === 'host';
       return {
         kind: relayed ? 'relay' : lan ? 'lan' : 'internet',
         label: relayed ? 'backup connection' : lan ? 'same network' : 'over the internet',
-        local: `${local.candidateType || '?'}/${local.protocol || '?'}`,
-        remote: `${remote.candidateType || '?'}/${remote.protocol || '?'}`,
+        local: `${local.candidateType || '?'}/${local.protocol || '?'} ${where(local)}`,
+        remote: `${remote.candidateType || '?'}/${remote.protocol || '?'} ${where(remote)}`,
         rtt: pair.currentRoundTripTime != null ? Math.round(pair.currentRoundTripTime * 1000) : null,
       };
     } catch { return null; }
@@ -787,13 +814,27 @@
     });
   }
 
+  // Drawings travel on their own data connection. If the network drops it
+  // (seen on Macs: video keeps flowing, data link dies), the friend rebuilds
+  // just this link and the video call stays up.
+  function hostLinkDead() {
+    return !!(S.peerHb && Date.now() - (S.lastHeard || 0) > 8000);
+  }
+
   function onViewerConnection(conn) {
-    if (S.conn && S.conn.open) {
+    const relink = !!(conn.metadata && conn.metadata.relink);
+    const samePeer = (S.conn && S.conn.peer === conn.peer) || (S.awaitRelink && S.awaitRelink.peer === conn.peer);
+    if (relink && samePeer && S.call) { adoptDataLink(conn); return; }
+    if (S.conn && S.conn.open && !hostLinkDead()) {
       log('second viewer refused');
       conn.on('open', () => { conn.send({ t: 'busy' }); setTimeout(() => conn.close(), 800); });
       return;
     }
+    const stale = S.conn;
     S.conn = conn;
+    S.awaitRelink = null;
+    clearTimeout(S.relinkTimer);
+    if (stale && stale !== conn) { try { stale.close(); } catch { /* ignore */ } }
     const viewerName = (conn.metadata && String(conn.metadata.name || '').slice(0, 24)) || 'Your friend';
     log('viewer reached us through pairing service, opening direct connection');
     setStatus($('share-status'), `${viewerName} found you. Connecting…`, 'busy');
@@ -811,6 +852,9 @@
     conn.on('open', () => {
       clearTimeout(openTimer);
       S.friend = viewerName;
+      S.lastHeard = Date.now();
+      S.peerHb = false;
+      startHeartbeat();
       log('data channel open, starting video');
       const q = quality();
       conn.send({ ...myProfileMsg(), codec: q.codec, mbps: q.mbps });
@@ -827,48 +871,117 @@
           log(`route: ${r.label} (${r.local} → ${r.remote}, rtt ${r.rtt}ms)`);
           if (S.conn === conn && conn.open) setStatus($('share-status'), `Connected (${r.label}). ${viewerName} can see your screen and draw on it.`, 'good');
         }
+        const d = await describeRoute(conn.peerConnection);
+        if (d) log(`drawing route: ${d.label} (${d.local} → ${d.remote}, rtt ${d.rtt}ms)`);
       });
     });
-    conn.on('data', (msg) => {
-      if (!msg || typeof msg !== 'object') return;
-      if (msg.t === 'hello') { takePeerProfile(msg); S.peerUpdating = false; return; }
-      if (msg.t === 'updating') { S.peerUpdating = true; log('friend is installing an update'); return; }
-      if (msg.t === 'need-video') {
-        log(`friend reports no video (${String(msg.why || '').slice(0, 40)})`);
-        const captureStuck = (freeze.stuck.capture || 0) >= 2;
-        restartVideo(`friend reports no video: ${String(msg.why || '').slice(0, 40)}`, {
-          kind: msg.manual ? 'manual' : captureStuck ? 'capture' : 'network',
-          freshCapture: captureStuck || !!msg.manual,
-          force: !!msg.manual,
-        });
-        return;
-      }
-      if (msg.t === 'vstat') { S.viewerStat = { recv: num(msg.recv), shown: num(msg.shown), decoded: num(msg.decoded), at: Date.now() }; return; }
-      if (['start', 'move', 'end', 'ping', 'clear'].includes(msg.t)) bridge.draw(msg);
-    });
-    conn.on('close', () => {
-      if (S.conn !== conn) return;
-      log('viewer left');
-      S.peerProfile = null;
-      renderChips();
-      bridge.draw({ t: 'clear' });
-      try { S.call && S.call.close(); } catch { /* ignore */ }
-      S.call = null;
-      S.conn = null;
-      clearInterval(S.statsTimer);
-      $('q-stats').textContent = '';
-      $('q-hint').textContent = '';
-      if (S.ended) return;
-      $('share-title').textContent = 'Send this code to your friend';
-      if (S.peerUpdating) {
-        setStatus($('share-status'), `${S.friend || 'Your friend'} is updating and will reconnect by themselves…`, 'busy');
-        S.peerUpdating = false;
-      } else {
-        setStatus($('share-status'), `${S.friend || 'Your friend'} left. Waiting for someone to enter the code…`, 'busy');
-      }
-      S.friend = null;
-    });
+    conn.on('data', (msg) => hostData(conn, msg));
+    conn.on('close', () => hostClosed(conn));
     conn.on('error', (e) => log(`data connection error: ${e && e.type}`));
+  }
+
+  // The friend rebuilt the drawing link: swap it in, keep the video call.
+  function adoptDataLink(conn) {
+    const old = S.conn;
+    S.conn = conn;
+    S.awaitRelink = null;
+    clearTimeout(S.relinkTimer);
+    if (old && old !== conn) { try { old.close(); } catch { /* ignore */ } }
+    log('friend is reconnecting the drawing link');
+    watchPc(conn.peerConnection, 'data');
+    conn.on('open', () => {
+      S.lastHeard = Date.now();
+      startHeartbeat();
+      log('drawing link rebuilt');
+      conn.send(myProfileMsg());
+      later(4000, async () => {
+        const d = await describeRoute(conn.peerConnection);
+        if (d) log(`drawing route: ${d.label} (${d.local} → ${d.remote}, rtt ${d.rtt}ms)`);
+      });
+    });
+    conn.on('data', (msg) => hostData(conn, msg));
+    conn.on('close', () => hostClosed(conn));
+    conn.on('error', (e) => log(`data connection error: ${e && e.type}`));
+  }
+
+  function hostData(conn, msg) {
+    if (!msg || typeof msg !== 'object') return;
+    if (S.conn === conn) S.lastHeard = Date.now();
+    if (msg.t === 'hb') { S.peerHb = true; return; }
+    if (msg.t === 'bye') { conn.byeReceived = true; return; }
+    if (msg.t === 'hello') { takePeerProfile(msg); S.peerUpdating = false; return; }
+    if (msg.t === 'updating') { S.peerUpdating = true; log('friend is installing an update'); return; }
+    if (msg.t === 'need-video') {
+      log(`friend reports no video (${String(msg.why || '').slice(0, 40)})`);
+      const captureStuck = (freeze.stuck.capture || 0) >= 2;
+      restartVideo(`friend reports no video: ${String(msg.why || '').slice(0, 40)}`, {
+        kind: msg.manual ? 'manual' : captureStuck ? 'capture' : 'network',
+        freshCapture: captureStuck || !!msg.manual,
+        force: !!msg.manual,
+      });
+      return;
+    }
+    if (msg.t === 'vstat') { S.viewerStat = { recv: num(msg.recv), shown: num(msg.shown), decoded: num(msg.decoded), at: Date.now() }; return; }
+    if (['start', 'move', 'end', 'ping', 'clear'].includes(msg.t)) bridge.draw(msg);
+  }
+
+  function hostClosed(conn) {
+    if (S.conn !== conn) return;
+    // Link died without a goodbye from a friend that can rebuild it: keep
+    // video running and give them time to reconnect the drawing link.
+    if (!S.ended && !conn.byeReceived && S.peerHb && S.call && !S.peerUpdating) {
+      log('drawing link closed, waiting up to 20 s for friend to reconnect it');
+      S.conn = null;
+      S.awaitRelink = { peer: conn.peer };
+      clearTimeout(S.relinkTimer);
+      S.relinkTimer = setTimeout(() => { if (S.awaitRelink && !S.conn) viewerGone(); }, 20000);
+      return;
+    }
+    viewerGone();
+  }
+
+  function viewerGone() {
+    log('viewer left');
+    S.awaitRelink = null;
+    clearTimeout(S.relinkTimer);
+    stopHeartbeat();
+    S.peerHb = false;
+    S.peerProfile = null;
+    renderChips();
+    bridge.draw({ t: 'clear' });
+    try { S.call && S.call.close(); } catch { /* ignore */ }
+    S.call = null;
+    S.conn = null;
+    clearInterval(S.statsTimer);
+    $('q-stats').textContent = '';
+    $('q-hint').textContent = '';
+    if (S.ended) return;
+    $('share-title').textContent = 'Send this code to your friend';
+    if (S.peerUpdating) {
+      setStatus($('share-status'), `${S.friend || 'Your friend'} is updating and will reconnect by themselves…`, 'busy');
+      S.peerUpdating = false;
+    } else {
+      setStatus($('share-status'), `${S.friend || 'Your friend'} left. Waiting for someone to enter the code…`, 'busy');
+    }
+    S.friend = null;
+  }
+
+  // Both sides send a tiny heartbeat on the drawing link so a silently dead
+  // link is noticed within seconds (only acted on when the other side sends
+  // heartbeats too, i.e. runs a version that can rebuild the link).
+  function startHeartbeat() {
+    clearInterval(S.hbTimer);
+    S.hbTimer = setInterval(() => {
+      try { if (S.conn && S.conn.open) S.conn.send({ t: 'hb' }); } catch { /* ignore */ }
+      if (S.role === 'share' && S.conn && hostLinkDead() && !S.quietLogged) {
+        S.quietLogged = true;
+        log(`no word from friend on the drawing link for ${Math.round((Date.now() - S.lastHeard) / 1000)} s`);
+      } else if (!hostLinkDead()) S.quietLogged = false;
+    }, 2000);
+  }
+  function stopHeartbeat() {
+    clearInterval(S.hbTimer);
+    S.hbTimer = null;
   }
 
   // Opens (or re-opens) the video connection to the friend. Drawings use a
@@ -948,9 +1061,10 @@
       try { S.peer.reconnect(); } catch { /* ignore */ }
       await new Promise((r) => setTimeout(r, 1500));
     }
+    if (!S.conn || S.ended) return; // drawing link went away while we waited
     startVideoCall(S.conn);
     if (old) setTimeout(() => { try { old.close(); } catch { /* ignore */ } }, 500);
-    S.conn.send({ t: 'stat', restarting: true });
+    if (S.conn.open) S.conn.send({ t: 'stat', restarting: true });
   }
 
   function tuneSender(pc) {
@@ -1011,26 +1125,45 @@
       setStatus($('join-status'), text, 'bad');
     };
 
-    peer.on('open', () => {
-      if (S.peer !== peer) return;
-      log('viewer peer registered, looking up code');
-      setStatus($('join-status'), 'Looking for your friend…', 'busy');
-      const conn = peer.connect(ID_PREFIX + code.toLowerCase(), {
-        reliable: true,
-        serialization: 'json',
-        metadata: { name: S.name },
-      });
-      S.conn = conn;
+    const hostId = ID_PREFIX + code.toLowerCase();
+    const playerEnded = () => {
+      log('player ended the connection');
+      teardown();
+      $('join-btn').disabled = false;
+      show('step-join');
+      $('end').hidden = true;
+      setStatus($('join-status'), `${S.friend || 'Your friend'} ended the session.`, '');
+    };
+    const videoAlive = () => {
+      const pc = S.call && S.call.peerConnection;
+      return !!(pc && pc.connectionState === 'connected');
+    };
+
+    // Wires a drawing link (the first one, or a rebuilt one).
+    const wireLink = (conn, relink) => {
       watchPc(conn.peerConnection, 'data');
-      later(8000, () => {
-        if (S.conn === conn && !conn.open) setStatus($('join-status'), 'Found your friend. Connecting (this can take up to 30 seconds)…', 'busy');
-      });
-      later(35000, () => {
-        if (S.conn === conn && !conn.open) fail('Found your friend, but couldn\'t connect. Try again. If it keeps failing, open Settings > Advanced and turn on "Always use the backup connection" on both computers.');
-      });
+      if (conn.peerConnection) {
+        conn.peerConnection.addEventListener('iceconnectionstatechange', () => {
+          if (S.conn !== conn) return;
+          S.dataDiscAt = conn.peerConnection.iceConnectionState === 'disconnected' ? Date.now() : null;
+        });
+      }
       conn.on('open', () => {
-        log('data channel open, waiting for video');
+        S.lastHeard = Date.now();
+        S.dataDiscAt = null;
+        startHeartbeat();
         conn.send(myProfileMsg());
+        later(4000, async () => {
+          const d = await describeRoute(conn.peerConnection);
+          if (d) log(`drawing route: ${d.label} (${d.local} → ${d.remote}, rtt ${d.rtt}ms)`);
+        });
+        if (relink) {
+          S.relinking = false;
+          S.relinkTries = 0;
+          log('drawing link rebuilt');
+          return;
+        }
+        log('data channel open, waiting for video');
         setStatus($('join-status'), 'Connected. Waiting for video…', 'busy');
         later(20000, () => {
           if (S.conn === conn && conn.open && !$('video').srcObject) fail('Connected, but no video arrived. Ask your friend to end the session and share again.');
@@ -1038,6 +1171,9 @@
       });
       conn.on('data', (msg) => {
         if (!msg || typeof msg !== 'object') return;
+        if (S.conn === conn) S.lastHeard = Date.now();
+        if (msg.t === 'hb') { S.peerHb = true; return; }
+        if (msg.t === 'bye') { conn.byeReceived = true; return; }
         if (msg.t === 'hello') { S.friend = String(msg.name || '').slice(0, 24) || 'your friend'; takePeerProfile(msg); log('player said hello'); }
         if (msg.t === 'stat') { S.playerStat = Object.assign(S.playerStat || {}, msg); return; }
         if (msg.t === 'updating') {
@@ -1062,14 +1198,67 @@
           joinFriend(back.code, { rejoinUntil: back.until, friend: back.friend });
           return;
         }
-        log('player ended the connection');
-        teardown();
-        $('join-btn').disabled = false;
-        show('step-join');
-        $('end').hidden = true;
-        setStatus($('join-status'), `${S.friend || 'Your friend'} ended the session.`, '');
+        // Closed without a goodbye from a player that can take a rebuilt link:
+        // the network dropped it, so rebuild instead of ending the session.
+        if (!conn.byeReceived && S.peerHb && S.peer === peer && !peer.destroyed) { relinkData('closed'); return; }
+        playerEnded();
       });
       conn.on('error', (e) => log(`data connection error: ${e && e.type}`));
+    };
+
+    // Opens a fresh drawing link to the player; video is left alone.
+    const relinkData = (why) => {
+      if (S.ended || S.peer !== peer || peer.destroyed) return;
+      S.relinking = true;
+      S.relinkTries = (S.relinkTries || 0) + 1;
+      log(`drawing link ${why}, reconnecting it (try ${S.relinkTries})`);
+      const go = () => {
+        if (S.ended || S.peer !== peer || peer.destroyed) return;
+        const old = S.conn;
+        const conn = peer.connect(hostId, { reliable: true, serialization: 'json', metadata: { name: S.name, relink: true } });
+        S.conn = conn;
+        if (old && old !== conn) { try { old.close(); } catch { /* ignore */ } }
+        wireLink(conn, true);
+        later(Math.min(20000, 6000 + S.relinkTries * 2000), () => {
+          if (S.conn === conn && !conn.open && !S.ended) relinkData('still down');
+        });
+      };
+      if (peer.disconnected) {
+        peer.once('open', go);
+        try { peer.reconnect(); } catch { /* ignore */ }
+      } else go();
+    };
+
+    // Watches the drawing link; rebuilds it if it fails or goes quiet.
+    clearInterval(S.linkWatch);
+    S.linkWatch = setInterval(() => {
+      if (S.ended || S.peer !== peer || S.relinking || !S.peerHb) return;
+      const c = S.conn;
+      if (!c || !c.open) return;
+      const ice = c.peerConnection ? c.peerConnection.iceConnectionState : '';
+      const quiet = Date.now() - (S.lastHeard || Date.now());
+      if (ice === 'failed' || ice === 'closed') relinkData(`failed (${ice})`);
+      else if (quiet > 6000) relinkData(`quiet for ${Math.round(quiet / 1000)} s`);
+      else if (ice === 'disconnected' && S.dataDiscAt && Date.now() - S.dataDiscAt > 4000) relinkData('disconnected');
+    }, 1000);
+
+    peer.on('open', () => {
+      if (S.peer !== peer) return;
+      log('viewer peer registered, looking up code');
+      setStatus($('join-status'), 'Looking for your friend…', 'busy');
+      const conn = peer.connect(hostId, {
+        reliable: true,
+        serialization: 'json',
+        metadata: { name: S.name },
+      });
+      S.conn = conn;
+      wireLink(conn, false);
+      later(8000, () => {
+        if (S.conn === conn && !conn.open) setStatus($('join-status'), 'Found your friend. Connecting (this can take up to 30 seconds)…', 'busy');
+      });
+      later(35000, () => {
+        if (S.conn === conn && !conn.open && !S.relinking) fail('Found your friend, but couldn\'t connect. Try again. If it keeps failing, open Settings > Advanced and turn on "Always use the backup connection" on both computers.');
+      });
     });
 
     peer.on('call', (call) => {
@@ -1105,11 +1294,16 @@
     peer.on('disconnected', () => {
       if (S.ended || S.peer !== peer) return;
       log('signaling disconnected');
-      if (!(S.conn && S.conn.open)) later(1500, () => { if (!S.ended && S.peer === peer && !peer.destroyed) peer.reconnect(); });
+      if (!(S.conn && S.conn.open) && !S.relinking) later(1500, () => { if (!S.ended && S.peer === peer && !peer.destroyed && peer.disconnected) peer.reconnect(); });
     });
     peer.on('error', (err) => {
       if (S.peer !== peer) return;
       log(`viewer peer error: ${err.type} ${err.message || ''}`);
+      if (S.relinking) {
+        // Player gone for good (and video too): the session is over.
+        if (err.type === 'peer-unavailable' && !videoAlive()) playerEnded();
+        return; // otherwise the relink timer tries again
+      }
       if (S.conn && S.conn.open) return; // ignore signaling hiccups once connected
       fail(friendlyPeerError(err));
     });
@@ -1399,12 +1593,16 @@
     const lines = [
       `${NAME} ${S.info.version} · ${S.info.platform}/${S.info.arch}`,
       `Role: ${S.role || 'none'} · signaling: ${S.peer ? (S.peer.disconnected ? 'disconnected' : 'connected') : 'not started'}`,
-      `Data channel: ${S.conn ? (S.conn.open ? 'open' : 'not open') : 'none'} · video: ${S.call ? (S.call.open ? 'open' : 'pending') : 'none'}`,
+      `Drawing link: ${S.conn ? (S.conn.open ? 'open' : 'not open') : 'none'}${S.conn && S.conn.peerConnection ? ` (ICE ${S.conn.peerConnection.iceConnectionState})` : ''}${S.lastHeard && S.conn ? ` · last heard ${Math.round((Date.now() - S.lastHeard) / 1000)} s ago` : ''}${S.peerHb ? ' · heartbeat on' : ''}${S.relinking ? ' · reconnecting' : ''} · video: ${S.call ? (S.call.open ? 'open' : 'pending') : 'none'}`,
       `Relay only: ${store.get('app.relayOnly', false)} · custom TURN: ${store.get('app.turn', null) ? 'yes' : 'no'}`,
     ];
-    const pc = (S.call && S.call.peerConnection) || (S.conn && S.conn.peerConnection);
-    const r = await describeRoute(pc);
-    if (pc) lines.push(`ICE: ${pc.iceConnectionState} · route: ${r ? `${r.label} (${r.local} → ${r.remote}, rtt ${r.rtt}ms)` : 'none yet'}`);
+    const routeLine = async (label, pc) => {
+      if (!pc) return;
+      const r = await describeRoute(pc);
+      lines.push(`${label}: ICE ${pc.iceConnectionState} · route: ${r ? `${r.label} (${r.local} → ${r.remote}, rtt ${r.rtt}ms)` : 'none yet'}`);
+    };
+    await routeLine('Video', S.call && S.call.peerConnection);
+    await routeLine('Drawings', S.conn && S.conn.peerConnection);
     lines.push('', ...S.log.slice(-120));
     return lines.join('\n');
   }
