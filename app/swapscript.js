@@ -16,6 +16,8 @@ function windowsSwapScript(o) {
   const say = (msg) => `echo %date% %time% ${msg} >> ${q(o.log)}`;
   return [
     '@echo off',
+    // Work from outside the temp folder, or Windows can't delete it at the end.
+    `cd /d ${q(path.dirname(o.work))}`,
     `echo.> ${q(o.log)}`,
     say(`updating, waiting for old app pid ${o.pid} to close`),
     'set /a n=0',
@@ -40,7 +42,8 @@ function windowsSwapScript(o) {
     `if errorlevel 8 ( ${say('copy had errors, robocopy code %errorlevel%')} ) else ( ${say('copy ok')} )`,
     `rmdir /S /Q ${q(o.staging)}`,
     say('starting new version'),
-    `start "" ${q(exe)}`,
+    // Start the new version in its own folder (not in the temp folder).
+    `start "" /D ${q(o.current)} ${q(exe)}`,
     `rmdir /S /Q ${q(o.work)}`,
   ].join('\r\n');
 }

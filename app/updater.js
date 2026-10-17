@@ -167,7 +167,7 @@ function launchSwapper(current, fresh, staging, work) {
     fs.writeFileSync(script, windowsSwapScript({
       pid, current, fresh, staging, work, exeName: `${BRAND.name}.exe`, log: updateLogPath(),
     }));
-    runCmdHidden(script, work, require('./native'));
+    runCmdHidden(script, path.dirname(work), require('./native'));
     return;
   }
   // macOS (and Linux test runs): plain shell.

@@ -40,7 +40,7 @@ fs.mkdirSync(work, { recursive: true });
 const script = path.join(work, 'swap.cmd');
 fs.writeFileSync(script, windowsSwapScript({ pid: stuck.pid, current, fresh, staging, work, exeName, log, waitSeconds: 4 })
   .replace('start "" ', `echo started> "${marker}"\r\nstart "" `));
-const r = runCmdHidden(script, work, native);
+const r = runCmdHidden(script, root, native);
 console.log('helper', r);
 if (!r.hidden) { console.error('hidden launch failed, fell back to spawn:', r.error); process.exit(1); }
 
