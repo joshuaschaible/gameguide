@@ -77,8 +77,8 @@
     if (S.name) people.push({ name: S.name, avatar: S.avatar, you: true, role: S.role === 'share' ? 'Streaming' : S.role === 'join' ? 'Watching' : '' });
     if (S.peerProfile) people.push({ name: S.peerProfile.name, avatar: S.peerProfile.avatar, you: false, role: S.role === 'share' ? 'Watching' : 'Streaming' });
     $('people').hidden = !people.length;
-    // In the stack the other person goes in front (leftmost, on top), you behind.
-    [...people].reverse().forEach((p, i, arr) => {
+    // In the stack you are always in front (leftmost, on top); others behind.
+    people.forEach((p, i, arr) => {
       const av = window.Profile.render(p.avatar, p.name, 28);
       av.classList.add('stacked');
       av.style.zIndex = String(arr.length - i);
