@@ -16,6 +16,11 @@ const BRAND = require('../app/brand.json');
 if (process.platform !== 'win32') { console.log('not Windows, skipping'); process.exit(0); }
 if (!native.available()) { console.error('native module failed to load:', native.error()); process.exit(1); }
 
+// Full-speed opt-out (EcoQoS) + priority on our own process must work.
+const boost = native.boost(process.pid);
+console.log('boost self:', boost);
+if (!/eco off/.test(boost)) { console.error('could not opt out of power throttling'); process.exit(1); }
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gg check '));
 const exeName = `${BRAND.name}.exe`;
 const current = path.join(root, 'installed', BRAND.name); // path with spaces, like a real install

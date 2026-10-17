@@ -60,31 +60,60 @@
   function show(id) {
     for (const s of STEPS) $(s).hidden = s !== id;
     $('end').hidden = !['step-share', 'step-watch'].includes(id) && !(id === 'step-join' && !S.ended);
+    $('tools').hidden = id !== 'step-watch';
+    document.body.classList.toggle('watching', id === 'step-watch');
+    if (id !== 'step-watch' && $('react-menu')) $('react-menu').hidden = true;
     renderChips();
+    updateConn();
   }
-  // Figma-style chips of who's in the session (you + the other player).
+  // Who's here: overlapping avatars; hover or click shows a list with names,
+  // who is streaming/watching, and which one is you.
   function renderChips() {
-    const box = $('chips');
-    box.innerHTML = '';
-    const add = (name, avatar, isYou) => {
-      const chip = document.createElement('span');
-      chip.className = isYou ? 'chip' : 'chip peer';
-      chip.title = isYou ? `${name} (you)` : name;
-      chip.appendChild(window.Profile.render(avatar, name, 26));
-      const n = document.createElement('span');
-      n.className = 'chip-name';
-      n.textContent = name;
-      chip.appendChild(n);
-      if (isYou && S.peerProfile) {
+    const stack = $('chips');
+    const menu = $('people-menu');
+    stack.innerHTML = '';
+    menu.innerHTML = '';
+    const people = [];
+    if (S.name) people.push({ name: S.name, avatar: S.avatar, you: true, role: S.role === 'share' ? 'Streaming' : S.role === 'join' ? 'Watching' : '' });
+    if (S.peerProfile) people.push({ name: S.peerProfile.name, avatar: S.peerProfile.avatar, you: false, role: S.role === 'share' ? 'Watching' : 'Streaming' });
+    $('people').hidden = !people.length;
+    // In the stack the other person goes in front (leftmost, on top), you behind.
+    [...people].reverse().forEach((p, i, arr) => {
+      const av = window.Profile.render(p.avatar, p.name, 28);
+      av.classList.add('stacked');
+      av.style.zIndex = String(arr.length - i);
+      stack.appendChild(av);
+    });
+    $('people-btn').title = people.map((p) => (p.you ? `${p.name} (you)` : p.name)).join(', ');
+    const head = document.createElement('div');
+    head.className = 'pop-title';
+    head.textContent = people.length > 1 ? 'In this session' : 'You';
+    menu.appendChild(head);
+    for (const p of people) {
+      const row = document.createElement('div');
+      row.className = 'person';
+      row.appendChild(window.Profile.render(p.avatar, p.name, 32));
+      const txt = document.createElement('div');
+      txt.className = 'person-text';
+      const n = document.createElement('div');
+      n.className = 'person-name';
+      n.textContent = p.name;
+      if (p.you) {
         const you = document.createElement('span');
-        you.className = 'you';
-        you.textContent = 'you';
-        chip.appendChild(you);
+        you.className = 'you-tag';
+        you.textContent = 'You';
+        n.appendChild(you);
       }
-      box.appendChild(chip);
-    };
-    if (S.peerProfile) add(S.peerProfile.name, S.peerProfile.avatar, false);
-    if (S.name) add(S.name, S.avatar, true);
+      txt.appendChild(n);
+      if (p.role && (S.peerProfile || S.role)) {
+        const r = document.createElement('div');
+        r.className = 'person-role';
+        r.textContent = p.role;
+        txt.appendChild(r);
+      }
+      row.appendChild(txt);
+      menu.appendChild(row);
+    }
   }
   // pv = profile version; changes whenever my name/avatar changes, so the
   // other side can tell (from heartbeats) that its copy is out of date.
@@ -288,7 +317,15 @@
   // =====================================================================
   // STREAM QUALITY
   // =====================================================================
-  const QUALITY_DEFAULTS = { res: '1080', fps: 60, mbps: 12, prefer: 'balanced', codec: 'h264' };
+  // Defaults scale with the computer: fewer cores / less memory -> lighter
+  // stream, so the game keeps its frame rate. Settings always win.
+  const CORES = navigator.hardwareConcurrency || 8;
+  const MEM_GB = navigator.deviceMemory || 8; // Chromium reports up to 8
+  const LOW_SPEC = CORES <= 4 || MEM_GB <= 4;
+  const MID_SPEC = !LOW_SPEC && CORES <= 6;
+  const QUALITY_DEFAULTS = LOW_SPEC ? { res: '720', fps: 30, mbps: 6, prefer: 'balanced', codec: 'h264' }
+    : MID_SPEC ? { res: '1080', fps: 30, mbps: 8, prefer: 'balanced', codec: 'h264' }
+      : { res: '1080', fps: 60, mbps: 12, prefer: 'balanced', codec: 'h264' };
   function quality() { return Object.assign({}, QUALITY_DEFAULTS, store.get('app.quality', {}) || {}); }
   // The bitrate actually used: the chosen max, lowered for this session when the
   // network keeps dropping the video (S.netCapMbps).
@@ -447,6 +484,72 @@
       };
     } catch { return null; }
   }
+  // Round trip and packet loss of the video connection (for the signal icon).
+  async function readNet(pc, dir) {
+    if (!pc) return null;
+    try {
+      const stats = await pc.getStats();
+      let rtt = null; let lost = null; let recv = null; let fraction = null;
+      stats.forEach((r) => {
+        if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded' && r.currentRoundTripTime != null) rtt = r.currentRoundTripTime * 1000;
+        if (dir === 'inbound-rtp' && r.type === 'inbound-rtp' && r.kind === 'video') { lost = r.packetsLost; recv = r.packetsReceived; }
+        if (dir === 'outbound-rtp' && r.type === 'remote-inbound-rtp' && r.kind === 'video' && r.fractionLost != null) fraction = r.fractionLost;
+      });
+      if (fraction == null && lost != null && recv != null) {
+        const p = S.netPrev || { lost, recv };
+        const dl = lost - p.lost; const dr = recv - p.recv;
+        fraction = dl + dr > 0 ? Math.max(0, dl / (dl + dr)) : 0;
+        S.netPrev = { lost, recv };
+      }
+      return { rtt, loss: fraction };
+    } catch { return null; }
+  }
+  // good / ok / poor from the network itself (a still game picture is not a bad signal).
+  function signalLevel(state, net, extra) {
+    if (state !== 'connected') return 'poor';
+    const rtt = net && net.rtt; const loss = net && net.loss;
+    if ((loss != null && loss > 0.05) || (rtt != null && rtt > 300)) return 'poor';
+    if ((loss != null && loss > 0.01) || (rtt != null && rtt > 120) || (extra && extra.limited)) return 'ok';
+    return 'good';
+  }
+  const LEVEL_TEXT = { good: 'Good', ok: 'Fair', poor: 'Poor', none: 'Not connected' };
+  function setSignal(level, detail) {
+    S.sigLevel = level;
+    S.sigDetail = detail || '';
+    const b = $('conn-btn');
+    b.classList.remove('sig-good', 'sig-ok', 'sig-poor', 'sig-none');
+    b.classList.add(`sig-${level}`);
+    b.title = `Connection: ${LEVEL_TEXT[level]}`;
+    if (!$('conn-menu').classList.contains('open')) return;
+    fillConnMenu();
+  }
+  function fillConnMenu() {
+    const lv = S.sigLevel || 'none';
+    $('conn-level').textContent = LEVEL_TEXT[lv];
+    $('conn-level').className = `conn-level lv-${lv}`;
+    const lines = [];
+    if (S.role === 'join') {
+      lines.push($('watch-status').textContent || 'Waiting for video…');
+    } else if (S.role === 'share') {
+      for (const id of ['q-stats', 'q-pipe', 'q-hint']) if ($(id).textContent) lines.push($(id).textContent);
+    }
+    if (S.sigDetail) lines.push(S.sigDetail);
+    $('conn-lines').innerHTML = '';
+    for (const l of lines) {
+      const p = document.createElement('p');
+      p.textContent = l;
+      $('conn-lines').appendChild(p);
+    }
+    $('refresh-video').hidden = S.role !== 'join';
+    $('conn-restart').hidden = S.role !== 'share';
+  }
+  // Connection button: visible while a friend is connected.
+  function updateConn() {
+    const live = !S.ended && (S.role === 'join' ? !$('step-watch').hidden : S.role === 'share' && !!S.call);
+    $('conn').hidden = !live;
+    if (!live) { $('conn-menu').classList.remove('open'); setSignal('none'); }
+  }
+
   const r0 = (n) => (n == null ? '–' : Math.round(n));
   function fmtStats(v, route) {
     if (!v || !v.w) return 'Starting video…';
@@ -525,6 +628,10 @@
           }
         } else S.swFallbackSince = null;
         $('q-stats').textContent = `Sending: ${fmtStats(v, routeCache)}`;
+        const netS = await readNet(pc, 'outbound-rtp');
+        setSignal(signalLevel(pc.connectionState, netS, { limited: v && v.limit === 'bandwidth' }),
+          netS ? `Round trip ${netS.rtt != null ? Math.round(netS.rtt) : '–'} ms · loss ${netS.loss != null ? (netS.loss * 100).toFixed(1) : '–'}%` : '');
+        updateConn();
         $('q-pipe').textContent = pipeline(v, viewer);
         let hint = bottleneck(v, viewer, quality(), routeCache);
         if (cf >= 3 && S.trackState !== 'minimized' && S.trackState !== 'closed') {
@@ -548,6 +655,9 @@
         if (f === 0 && S.playerStat && S.playerStat.restarting) S.playerStat.restarting = false;
         const shown = rate('shown', S.framesShown, performance.now());
         $('watch-status').textContent = `Watching ${S.friend || 'your friend'} · ${fmtStats(v, routeCache)}${shown != null ? ` · showing ${r0(shown)} fps` : ''}`;
+        const netV = await readNet(pc, 'inbound-rtp');
+        setSignal(signalLevel(pc.connectionState, netV),
+          netV ? `Round trip ${netV.rtt != null ? Math.round(netV.rtt) : '–'} ms · loss ${netV.loss != null ? (netV.loss * 100).toFixed(1) : '–'}%` : '');
         if (S.conn && S.conn.open && v) {
           S.conn.send({ t: 'vstat', recv: v.receivedFps, decoded: v.fps, shown, dropped: v.droppedFps, decoder: v.encoder });
         }
@@ -1137,6 +1247,7 @@
 
   function viewerGone() {
     log('viewer left');
+    setTimeout(updateConn, 0);
     S.drawDc = null;
     if (S.rx) clearTimeout(S.rx.timer);
     S.rx = null;
@@ -1610,23 +1721,16 @@
     document.querySelectorAll('.tool[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === tool));
   }
   document.querySelectorAll('.tool[data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
-  function setColor(color, fromCustom) {
-    if (!/^#[0-9a-fA-F]{6}$/.test(color)) return;
-    drawState.color = color.toLowerCase();
-    store.set('app.color', drawState.color);
-    let matched = false;
-    document.querySelectorAll('.swatch[data-color]').forEach((x) => {
-      const on = !fromCustom && x.dataset.color.toLowerCase() === drawState.color;
-      x.classList.toggle('active', on);
-      matched = matched || on;
-    });
-    const custom = document.querySelector('.swatch.custom');
-    custom.classList.toggle('active', !matched);
-    if (!matched) { custom.style.background = drawState.color; $('custom-color').value = drawState.color; }
+  function setColor(color) {
+    const presets = [...document.querySelectorAll('.swatch[data-color]')].map((x) => x.dataset.color.toLowerCase());
+    color = String(color || '').toLowerCase();
+    if (!presets.includes(color)) color = presets[0]; // older versions allowed any color
+    drawState.color = color;
+    store.set('app.color', color);
+    document.querySelectorAll('.swatch[data-color]').forEach((x) => x.classList.toggle('active', x.dataset.color.toLowerCase() === color));
   }
-  document.querySelectorAll('.swatch[data-color]').forEach((b) => b.addEventListener('click', () => setColor(b.dataset.color, false)));
-  $('custom-color').addEventListener('input', (ev) => setColor(ev.target.value, true));
-  setColor(drawState.color, false);
+  document.querySelectorAll('.swatch[data-color]').forEach((b) => b.addEventListener('click', () => setColor(b.dataset.color)));
+  setColor(drawState.color);
   $('clear').addEventListener('click', () => send({ t: 'clear' }));
   $('refresh-video').addEventListener('click', () => {
     if (S.peer && S.peer.disconnected && !S.peer.destroyed) {
@@ -1676,12 +1780,58 @@
   $('react-btn').addEventListener('click', (ev) => { ev.stopPropagation(); setReactMenu($('react-menu').hidden); });
   document.addEventListener('click', (ev) => { if (!$('react-menu').hidden && !ev.target.closest('.react-wrap')) setReactMenu(false); });
 
+  // ---------- stall detector ----------
+  // If this app itself freezes (computer overloaded by a heavy game, power
+  // saving), say so in the log: it explains video/drawing drop-outs.
+  (() => {
+    let last = performance.now();
+    let worst = 0; let count = 0; let since = Date.now();
+    setInterval(() => {
+      const now = performance.now();
+      const gap = now - last - 500;
+      last = now;
+      if (gap > 1000 && S.role && !S.ended) { count++; worst = Math.max(worst, gap); }
+      if (count && Date.now() - since > 10000) {
+        log(`this app was frozen ${count}x in the last ${Math.round((Date.now() - since) / 1000)} s (longest ${(worst / 1000).toFixed(1)} s): the computer is overloaded or power-saving`);
+        count = 0; worst = 0; since = Date.now();
+      } else if (!count) since = Date.now();
+    }, 500);
+  })();
+
+  // ---------- header menus (people, connection) ----------
+  const menus = [
+    { btn: 'people-btn', menu: 'people-menu' },
+    { btn: 'conn-btn', menu: 'conn-menu', onOpen: fillConnMenu },
+  ];
+  function closeMenus(except) {
+    for (const m of menus) {
+      if (m.menu === except) continue;
+      $(m.menu).classList.remove('open');
+      $(m.btn).setAttribute('aria-expanded', 'false');
+    }
+  }
+  for (const m of menus) {
+    $(m.btn).addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const open = !$(m.menu).classList.contains('open');
+      closeMenus(m.menu);
+      $(m.menu).classList.toggle('open', open);
+      $(m.btn).setAttribute('aria-expanded', String(open));
+      if (open && m.onOpen) m.onOpen();
+    });
+  }
+  document.addEventListener('click', (ev) => { if (!ev.target.closest('.pop-wrap')) closeMenus(); });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMenus(); });
+  setInterval(() => { if ($('conn-menu').classList.contains('open')) fillConnMenu(); }, 1000);
+  $('conn-restart').addEventListener('click', () => { closeMenus(); $('restart-stream').click(); });
+  $('conn-details').addEventListener('click', () => { closeMenus(); $('open-details').click(); });
+
   document.addEventListener('keydown', (ev) => {
     if ($('step-watch').hidden || ev.target.tagName === 'INPUT') return;
     const k = ev.key.toLowerCase();
     if (k === 'p') setTool('pen');
     if (k === 'o') setTool('ping');
-    if (k === 'c') send({ t: 'clear' });
+    if (k === 'e' || k === 'c') send({ t: 'clear' });
     if (k === 'escape') setReactMenu(false);
     const n = Number(ev.key);
     if (n >= 1 && n <= REACTIONS.length && !ev.ctrlKey && !ev.metaKey && !ev.altKey) sendReaction(REACTIONS[n - 1]);

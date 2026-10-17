@@ -9,9 +9,54 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark">+</span> <span data-brand></span></div>
+  <div class="top-left">
+    <!-- drawing tools: shown here while watching -->
+    <div id="tools" class="tools" hidden>
+      <button class="tool active" data-tool="pen" title="Pen (P)">✏️ Pen</button>
+      <button class="tool" data-tool="ping" title="Pointer (O)">📍 Pointer</button>
+      <span class="sep"></span>
+      <div class="swatches" role="group" aria-label="Color">
+        <button class="swatch active" data-color="#ff3b6b" title="Red"></button>
+        <button class="swatch" data-color="#ff8a00" title="Orange"></button>
+        <button class="swatch" data-color="#ffd23f" title="Yellow"></button>
+        <button class="swatch" data-color="#7dff5a" title="Green"></button>
+        <button class="swatch" data-color="#3bf0ff" title="Cyan"></button>
+        <button class="swatch" data-color="#3d7bff" title="Blue"></button>
+        <button class="swatch" data-color="#b26bff" title="Purple"></button>
+        <button class="swatch" data-color="#ff4fd8" title="Pink"></button>
+        <button class="swatch" data-color="#ffffff" title="White"></button>
+        <button class="swatch" data-color="#111111" title="Black"></button>
+      </div>
+      <span class="sep"></span>
+      <button id="clear" class="tool" title="Erase all marks (E)">🧽 Erase</button>
+      <div class="react-wrap">
+        <button id="react-btn" class="tool" title="Send a reaction (keys 1-8)" aria-haspopup="true" aria-expanded="false">😀 React</button>
+        <div id="react-menu" class="react-menu" role="menu" hidden></div>
+      </div>
+    </div>
+  </div>
   <div class="top-right">
-    <div id="chips" class="chips" aria-label="Who's here"></div>
+    <div id="people" class="pop-wrap people" hidden>
+      <button id="people-btn" class="people-btn" aria-haspopup="true" aria-expanded="false" title="Who's here">
+        <span id="chips" class="avatar-stack"></span>
+      </button>
+      <div id="people-menu" class="popover people-menu" role="menu"></div>
+    </div>
+    <div id="conn" class="pop-wrap" hidden>
+      <button id="conn-btn" class="icon-btn sig sig-none" aria-haspopup="true" aria-expanded="false" title="Connection">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect class="b1" x="3" y="15" width="4" height="6" rx="1"/><rect class="b2" x="10" y="10" width="4" height="11" rx="1"/><rect class="b3" x="17" y="4" width="4" height="17" rx="1"/></svg>
+      </button>
+      <div id="conn-menu" class="popover conn-menu">
+        <div class="pop-head"><span class="pop-title">Connection</span><span id="conn-level" class="conn-level"></span></div>
+        <div id="conn-lines" class="conn-lines"></div>
+        <span id="watch-status" hidden></span>
+        <div class="pop-actions">
+          <button id="refresh-video" class="ghost small" title="Ask for a fresh video connection">🔄 Refresh video</button>
+          <button id="conn-restart" class="ghost small" title="Fresh capture + fresh video connection">🔄 Restart stream</button>
+          <button id="conn-details" class="link">Troubleshooting details</button>
+        </div>
+      </div>
+    </div>
     <button id="end" class="danger small" hidden>End session</button>
     <button id="open-settings" class="icon-btn" title="Settings" aria-label="Settings">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -173,36 +218,6 @@
 
   <!-- 4. watch -->
   <section id="step-watch" class="watch" hidden>
-    <div class="toolbar">
-      <div class="tools">
-        <button class="tool active" data-tool="pen" title="Pen (P)">✏️ Pen</button>
-        <button class="tool" data-tool="ping" title="Pointer (O)">📍 Pointer</button>
-        <span class="sep"></span>
-        <div class="swatches" role="group" aria-label="Color">
-          <button class="swatch active" data-color="#ff3b6b" title="Red"></button>
-          <button class="swatch" data-color="#ff8a00" title="Orange"></button>
-          <button class="swatch" data-color="#ffd23f" title="Yellow"></button>
-          <button class="swatch" data-color="#7dff5a" title="Green"></button>
-          <button class="swatch" data-color="#3bf0ff" title="Cyan"></button>
-          <button class="swatch" data-color="#3d7bff" title="Blue"></button>
-          <button class="swatch" data-color="#b26bff" title="Purple"></button>
-          <button class="swatch" data-color="#ff4fd8" title="Pink"></button>
-          <button class="swatch" data-color="#ffffff" title="White"></button>
-          <button class="swatch" data-color="#111111" title="Black"></button>
-          <label class="swatch custom" title="Pick any color"><input id="custom-color" type="color" value="#00ffaa" aria-label="Custom color"></label>
-        </div>
-        <span class="sep"></span>
-        <button id="clear" class="tool" title="Clear (C)">🧹 Clear</button>
-        <span class="sep"></span>
-        <div class="react-wrap">
-          <button id="react-btn" class="tool" title="Send a reaction (keys 1-8)" aria-haspopup="true" aria-expanded="false">😀 React</button>
-          <div id="react-menu" class="react-menu" role="menu" hidden></div>
-        </div>
-        <span class="sep"></span>
-        <button id="refresh-video" class="tool" title="Ask for a fresh video connection">🔄 Refresh video</button>
-      </div>
-      <span id="watch-status" class="watch-status"></span>
-    </div>
     <div id="stage" class="stage">
       <video id="video" autoplay playsinline muted></video>
       <canvas id="draw"></canvas>

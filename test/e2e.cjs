@@ -92,10 +92,23 @@ const stub = (name) => `
   console.log('friend video', await friend.evaluate(() => [document.getElementById('video').videoWidth, document.getElementById('video').videoHeight]));
   console.log('player status:', await player.textContent('#share-status'));
   await player.waitForTimeout(500);
-  const chips = (pg) => pg.evaluate(() => [...document.querySelectorAll('#chips .chip')].map((c) => `${c.className}:${c.querySelector('.chip-name').textContent}:${c.querySelector('.avatar img') ? 'photo' : c.querySelector('.avatar').textContent}`));
+  const chips = (pg) => pg.evaluate(() => [...document.querySelectorAll('#people-menu .person')].map((c) => `${c.querySelector('.you-tag') ? 'you' : 'peer'}:${c.querySelector('.person-name').firstChild.textContent}:${c.querySelector('.avatar img') ? 'photo' : c.querySelector('.avatar').textContent}`));
   console.log('player chips:', JSON.stringify(await chips(player)));
   console.log('friend chips:', JSON.stringify(await chips(friend)));
   await player.screenshot({ path: '/tmp/claude-0/chips-player.png', clip: { x: 0, y: 0, width: 1200, height: 70 } });
+  // UI screenshots: header, people menu, connection menu, share page
+  await friend.waitForTimeout(4500);
+  await friend.screenshot({ path: '/tmp/claude-0/ui-watch.png' });
+  await friend.hover('#people-btn');
+  await friend.waitForTimeout(200);
+  await friend.screenshot({ path: '/tmp/claude-0/ui-people.png', clip: { x: 700, y: 0, width: 500, height: 260 } });
+  await friend.mouse.move(600, 500);
+  await friend.click('#conn-btn');
+  await friend.waitForTimeout(300);
+  await friend.screenshot({ path: '/tmp/claude-0/ui-conn.png', clip: { x: 700, y: 0, width: 500, height: 300 } });
+  console.log('signal level (friend, player):', await friend.evaluate(() => window.__app.sigLevel), await player.evaluate(() => window.__app.sigLevel));
+  await friend.keyboard.press('Escape');
+  await player.screenshot({ path: '/tmp/claude-0/ui-share.png' });
 
   // draw a stroke + ping + clear
   const box = await friend.locator('#draw').boundingBox();
@@ -186,6 +199,7 @@ const stub = (name) => `
   console.log('after drops: cap', await player.evaluate(() => window.__app.netCapMbps), 'codecOverride', await player.evaluate(() => window.__app.codecOverride), '| friend:', await friend.textContent('#watch-status'));
   // manual refresh button
   await friend.waitForTimeout(11000);
+  await friend.click('#conn-btn');
   await friend.click('#refresh-video');
   await friend.waitForTimeout(5000);
   console.log('after refresh button (player log tail):', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /rebuild|refresh|friend reports/.test(l)).slice(-2))));

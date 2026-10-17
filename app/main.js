@@ -377,18 +377,23 @@ function correctOverlayFrame(want) {
   }
 }
 
+let lastBoostLog = '';
 function boostProcesses() {
   if (!isWin) return;
   const out = [];
   for (const m of app.getAppMetrics()) {
     const relevant = ['Browser', 'GPU', 'Tab'].includes(m.type)
       || (m.type === 'Utility' && /video_capture|audio|network/i.test(m.serviceName || m.name || ''));
-    if (!relevant) continue;
-    out.push(`${m.type}${m.serviceName ? `(${m.serviceName.split('.')[0]})` : ''} ${m.pid}: ${native.boost(m.pid)}`);
+    // Every process of ours runs at full speed; the important ones also get priority.
+    out.push(`${m.type}${m.serviceName ? `(${m.serviceName.split('.')[0]})` : ''} ${m.pid}: ${native.boost(m.pid, !relevant)}`);
   }
   boostLog = out;
-  if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('app:log', `priority: ${out.join('; ')}`);
+  const line = out.join('; ');
+  if (line !== lastBoostLog && mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('app:log', `priority: ${line}`);
+  lastBoostLog = line;
 }
+// New helper processes appear when video is rebuilt; re-apply now and then.
+setInterval(() => { if (target) boostProcesses(); }, 60000);
 
 function hideOverlay() {
   if (overlayWin && !overlayWin.isDestroyed() && overlayWin.isVisible()) overlayWin.hide();

@@ -38,6 +38,23 @@ function loadWin() {
   const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
   const ABOVE_NORMAL_PRIORITY_CLASS = 0x8000;
   const GPU_PRIO = { HIGH: 4, ABOVE_NORMAL: 3 };
+  // Windows 11 "EcoQoS": background apps get parked on efficiency cores at low
+  // clocks. With a heavy game (Star Citizen) that starves capture/encoding/
+  // networking for seconds. Opt our processes out (full speed, normal timers).
+  let SetProcessInformation = null;
+  try {
+    koffi.struct('GG_POWER_THROTTLING', { Version: 'uint32', ControlMask: 'uint32', StateMask: 'uint32' });
+    SetProcessInformation = kernel32.func('int32 __stdcall SetProcessInformation(void *h, int32 cls, GG_POWER_THROTTLING *info, uint32_t size)');
+  } catch { /* older Windows */ }
+  const ProcessPowerThrottling = 4;
+  const THROTTLE_EXECUTION_SPEED = 0x1;
+  const THROTTLE_IGNORE_TIMER_RESOLUTION = 0x4;
+  function fullSpeed(h) {
+    if (!SetProcessInformation) return 'eco n/a';
+    const ok = SetProcessInformation(h, ProcessPowerThrottling,
+      { Version: 1, ControlMask: THROTTLE_EXECUTION_SPEED | THROTTLE_IGNORE_TIMER_RESOLUTION, StateMask: 0 }, 12);
+    return ok ? 'eco off' : 'eco unchanged';
+  }
 
   // Starting a helper with no console window at all. Node's spawn can't do this
   // for detached processes (windowsHide is ignored and every console tool the
@@ -115,11 +132,14 @@ function loadWin() {
     },
     // Same trick OBS uses: give our capture/encode processes GPU priority so a
     // game maxing out the GPU doesn't starve the stream. HIGH needs admin.
-    boost(pid) {
+    // fullSpeedOnly: just opt out of power throttling, leave priorities alone.
+    boost(pid, fullSpeedOnly) {
       const h = OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
       if (!h) return 'open failed';
       try {
-        const cpu = SetPriorityClass(h, ABOVE_NORMAL_PRIORITY_CLASS) ? 'cpu above-normal' : 'cpu unchanged';
+        const eco = fullSpeed(h);
+        if (fullSpeedOnly) return eco;
+        const cpu = `${SetPriorityClass(h, ABOVE_NORMAL_PRIORITY_CLASS) ? 'cpu above-normal' : 'cpu unchanged'}, ${eco}`;
         let gpu = 'gpu unchanged';
         if (D3DKMTSetProcessSchedulingPriorityClass) {
           if (D3DKMTSetProcessSchedulingPriorityClass(h, GPU_PRIO.HIGH) === 0) gpu = 'gpu high';
@@ -267,10 +287,10 @@ function get() {
 module.exports = {
   available() { return !!get(); },
   error() { get(); return loadError ? String(loadError.message || loadError) : null; },
-  boost(pid) {
+  boost(pid, fullSpeedOnly) {
     const i = get();
     if (!i || !i.boost) return 'not supported';
-    try { return i.boost(pid); } catch (e) { return `failed: ${e.message}`; }
+    try { return i.boost(pid, fullSpeedOnly); } catch (e) { return `failed: ${e.message}`; }
   },
   // Windows only: start a program with no window. Returns its pid. Throws if
   // unavailable so callers can fall back to child_process.spawn.
