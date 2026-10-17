@@ -70,27 +70,46 @@
   }
 
   // Shrink any picture to a 96 x 96 centre crop JPEG.
-  function photoFromFile(file) {
+  // The file is read as a data: URL (the page's security policy blocks blob:
+  // images). If the browser can't decode it (e.g. HEIC photos from an iPhone),
+  // the system's own image decoder in the main process takes over.
+  function readAsDataUrl(file) {
     return new Promise((resolve, reject) => {
-      if (!file || !/^image\//.test(file.type)) { reject(new Error('Pick an image file.')); return; }
-      const url = URL.createObjectURL(file);
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result || ''));
+      r.onerror = () => reject(r.error || new Error('read failed'));
+      r.readAsDataURL(file);
+    });
+  }
+  function cropToJpeg(src) {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
+        if (!img.naturalWidth || !img.naturalHeight) { reject(new Error('empty image')); return; }
         const c = document.createElement('canvas');
         c.width = c.height = PHOTO_SIZE;
         const s = Math.min(img.naturalWidth, img.naturalHeight);
         const sx = (img.naturalWidth - s) / 2;
         const sy = (img.naturalHeight - s) / 2;
         c.getContext('2d').drawImage(img, sx, sy, s, s, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
-        URL.revokeObjectURL(url);
         let q = 0.85;
         let data = c.toDataURL('image/jpeg', q);
         while (data.length > MAX_PHOTO_CHARS && q > 0.3) { q -= 0.15; data = c.toDataURL('image/jpeg', q); }
-        resolve({ kind: 'photo', data });
+        resolve(data);
       };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Couldn't read that picture.")); };
-      img.src = url;
+      img.onerror = () => reject(new Error('decode failed'));
+      img.src = src;
     });
+  }
+  async function photoFromFile(file) {
+    if (!file) throw new Error('Pick an image file.');
+    try {
+      return { kind: 'photo', data: await cropToJpeg(await readAsDataUrl(file)) };
+    } catch (e) {
+      const viaSystem = window.bridge && window.bridge.imageToAvatar ? await window.bridge.imageToAvatar(file).catch(() => null) : null;
+      if (viaSystem && sanitize({ kind: 'photo', data: viaSystem })) return { kind: 'photo', data: viaSystem };
+      throw new Error("Couldn't read that picture. Try a PNG or JPEG.");
+    }
   }
 
   // Builds a picker into `box`: the built-in avatars + "Upload photo".

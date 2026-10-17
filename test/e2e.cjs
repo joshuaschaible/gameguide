@@ -190,6 +190,19 @@ const stub = (name) => `
   await friend.waitForTimeout(5000);
   console.log('after refresh button (player log tail):', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /rebuild|refresh|friend reports/.test(l)).slice(-2))));
   console.log('friend after refresh:', await friend.textContent('#watch-status'));
+  // ---- profile changes during a session reach the other side ----
+  const peerAv = (pg) => pg.evaluate(() => window.__app.peerProfile && window.__app.peerProfile.avatar && (window.__app.peerProfile.avatar.value || window.__app.peerProfile.avatar.kind));
+  // friend changes avatar in Settings and saves
+  await friend.click('#open-settings');
+  await friend.click('#avatar-picker-settings .avatar-option[data-value="🐙"]');
+  await friend.click('#settings-save');
+  await player.waitForTimeout(1200);
+  console.log('profile sync friend->player (settings save):', await peerAv(player));
+  // player's update message is lost; heartbeat version check must catch it
+  await player.evaluate(() => { window.__app.avatar = { kind: 'emoji', value: '🦄', color: '#b26bff' }; window.__app.profileVer = Date.now(); });
+  await friend.waitForFunction(() => window.__app.peerProfile && window.__app.peerProfile.avatar && window.__app.peerProfile.avatar.value === '🦄', null, { timeout: 8000 }).catch(() => {});
+  console.log('profile sync player->friend (message lost, healed by heartbeat):', await peerAv(friend));
+  console.log('friend chips now:', JSON.stringify(await chips(friend)));
   // ---- never send more than 4K (hardware H.264 limit) ----
   console.log('send cap check:', JSON.stringify(await player.evaluate(async () => {
     const S = window.__app;

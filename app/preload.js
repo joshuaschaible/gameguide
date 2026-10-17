@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('bridge', {
   brand: ipcRenderer.sendSync('brand:get'),
@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld('bridge', {
   overlayActive: (active) => ipcRenderer.send('overlay:active', !!active),
   onToast: (fn) => ipcRenderer.on('overlay:toast', (_e, t) => fn(t)),
   onOverlayFrame: (fn) => ipcRenderer.on('overlay:frame', (_e, f) => fn(f)),
+  // Avatar fallback for pictures the page can't decode (HEIC etc.).
+  imageToAvatar: (file) => {
+    try {
+      const p = webUtils && webUtils.getPathForFile ? webUtils.getPathForFile(file) : '';
+      return p ? ipcRenderer.invoke('image:avatar', p) : Promise.resolve(null);
+    } catch { return Promise.resolve(null); }
+  },
   onReceipt: (fn) => ipcRenderer.on('overlay:receipt', (_e, st) => fn(st)),
   onLog: (fn) => ipcRenderer.on('app:log', (_e, line) => fn(line)),
   onToggleSound: (fn) => ipcRenderer.on('overlay:toggleSound', () => fn()),

@@ -27,6 +27,23 @@ const path = require('path');
   console.log('sources html:', (await win.innerHTML('#sources')).slice(0, 200));
   const n = await win.locator('.source').count();
   console.log('source buttons', n);
+  // ---- avatar upload through the real button (real CSP + preload) ----
+  await win.click('#open-settings');
+  const avInput = win.locator('#avatar-picker-settings input[type=file]');
+  const avatarNow = () => win.evaluate(() => window.__app.pendingAvatar);
+  for (const f of ['photo.png', 'big.jpg', 'broken.png']) {
+    await win.evaluate(() => { window.__app.pendingAvatar = { kind: 'emoji', value: '🦊', color: '#ff8a00' }; });
+    await avInput.setInputFiles(`${process.env.GG_TEST_IMGS || '/tmp/claude-0/imgs'}/${f}`);
+    await win.waitForTimeout(800);
+    const a = await avatarNow();
+    const tip = await win.getAttribute('#avatar-picker-settings .avatar-option.photo', 'title');
+    console.log(`avatar upload ${f}:`, a && a.kind, a && a.data ? `${a.data.slice(0, 23)}… ${a.data.length} chars` : '', '| tip:', tip);
+  }
+  await win.evaluate(() => { const i = document.createElement('input'); i.type = 'file'; i.id = 'gg-test-file'; document.body.appendChild(i); });
+  await win.setInputFiles('#gg-test-file', '${process.env.GG_TEST_IMGS || '/tmp/claude-0/imgs'}/big.jpg');
+  const sys = await win.evaluate(async () => window.bridge.imageToAvatar(document.getElementById('gg-test-file').files[0]));
+  console.log('system decoder fallback:', sys ? `${sys.slice(0, 23)}… ${sys.length} chars` : sys);
+  await win.keyboard.press('Escape');
   if (n) {
     await win.click('.source');
     await win.waitForTimeout(4000);

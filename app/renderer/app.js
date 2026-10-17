@@ -86,10 +86,38 @@
     if (S.peerProfile) add(S.peerProfile.name, S.peerProfile.avatar, false);
     if (S.name) add(S.name, S.avatar, true);
   }
-  function myProfileMsg() { return { t: 'hello', name: S.name, avatar: S.avatar }; }
+  // pv = profile version; changes whenever my name/avatar changes, so the
+  // other side can tell (from heartbeats) that its copy is out of date.
+  function myProfileMsg() { return { t: 'hello', name: S.name, avatar: S.avatar, pv: S.profileVer }; }
+  function bumpProfile() { S.profileVer = Date.now(); store.set('app.profileVer', S.profileVer); }
+  // Control messages go on every open path (drawing link + video connection).
+  function sendCtl(msg) {
+    try { if (S.conn && S.conn.open) S.conn.send(msg); } catch { /* ignore */ }
+    try { if (S.drawDc && S.drawDc.readyState === 'open') S.drawDc.send(JSON.stringify(msg)); } catch { /* ignore */ }
+  }
+  // Heartbeat says which profile version the other side has; ask for it if ours is stale.
+  function checkPeerPv(pv) {
+    if (!pv || (S.peerProfile && S.peerProfile.pv === pv)) return;
+    const now = Date.now();
+    if (now - (S.profileAskedAt || 0) < 3000) return;
+    S.profileAskedAt = now;
+    sendCtl({ t: 'profile?' });
+  }
+  function handleCtl(m) {
+    if (m.t === 'hello') {
+      if (S.role === 'join') S.friend = String(m.name || '').slice(0, 24) || 'your friend';
+      takePeerProfile(m);
+      return true;
+    }
+    if (m.t === 'profile?') { sendCtl(myProfileMsg()); return true; }
+    if (m.t === 'hb') { checkPeerPv(m.pv); return true; }
+    return false;
+  }
   function takePeerProfile(msg) {
     const name = String(msg.name || '').slice(0, 24) || 'Friend';
-    S.peerProfile = { name, avatar: window.Profile.sanitize(msg.avatar) };
+    const changed = S.peerProfile && (S.peerProfile.name !== name || JSON.stringify(S.peerProfile.avatar) !== JSON.stringify(window.Profile.sanitize(msg.avatar)));
+    S.peerProfile = { name, avatar: window.Profile.sanitize(msg.avatar), pv: msg.pv || null };
+    if (changed) log(`friend updated their profile (${name})`);
     renderChips();
   }
 
@@ -867,12 +895,18 @@
     try {
       const dc = pc.createDataChannel('gg-draw', { negotiated: true, id: DRAW_DC_ID, ordered: true });
       pc.ggDrawDc = dc;
-      dc.onopen = () => { S.drawDc = dc; log('drawing path inside the video connection is open'); };
+      dc.onopen = () => {
+        S.drawDc = dc;
+        log('drawing path inside the video connection is open');
+        try { dc.send(JSON.stringify(myProfileMsg())); } catch { /* ignore */ }
+      };
       dc.onclose = () => { if (S.drawDc === dc) S.drawDc = null; };
       dc.onmessage = (ev) => {
         let m = null;
         try { m = JSON.parse(ev.data); } catch { return; }
-        if (m && S.role === 'share' && DRAW_TYPES.includes(m.t)) receiveDraw(m);
+        if (!m || typeof m !== 'object') return;
+        if (S.role === 'share' && DRAW_TYPES.includes(m.t)) { receiveDraw(m); return; }
+        handleCtl(m);
       };
     } catch (e) {
       log(`no drawing path inside the video connection (${e && e.message})`);
@@ -1013,8 +1047,9 @@
   function hostData(conn, msg) {
     if (!msg || typeof msg !== 'object') return;
     if (S.conn === conn) S.lastHeard = Date.now();
-    if (msg.t === 'hb') { S.peerHb = true; return; }
+    if (msg.t === 'hb') { S.peerHb = true; checkPeerPv(msg.pv); return; }
     if (msg.t === 'bye') { conn.byeReceived = true; return; }
+    if (msg.t === 'profile?') { sendCtl(myProfileMsg()); return; }
     if (msg.t === 'hello') { takePeerProfile(msg); S.peerUpdating = false; return; }
     if (msg.t === 'updating') { S.peerUpdating = true; log('friend is installing an update'); return; }
     if (msg.t === 'need-video') {
@@ -1081,7 +1116,8 @@
   function startHeartbeat() {
     clearInterval(S.hbTimer);
     S.hbTimer = setInterval(() => {
-      try { if (S.conn && S.conn.open) S.conn.send({ t: 'hb' }); } catch { /* ignore */ }
+      try { if (S.conn && S.conn.open) S.conn.send({ t: 'hb', pv: S.profileVer }); } catch { /* ignore */ }
+      try { if (S.drawDc && S.drawDc.readyState === 'open') S.drawDc.send(JSON.stringify({ t: 'hb', pv: S.profileVer })); } catch { /* ignore */ }
       if (S.role === 'share' && S.conn && hostLinkDead() && !S.quietLogged) {
         S.quietLogged = true;
         log(`no word from friend on the drawing link for ${Math.round((Date.now() - S.lastHeard) / 1000)} s`);
@@ -1282,8 +1318,9 @@
       conn.on('data', (msg) => {
         if (!msg || typeof msg !== 'object') return;
         if (S.conn === conn) S.lastHeard = Date.now();
-        if (msg.t === 'hb') { S.peerHb = true; return; }
+        if (msg.t === 'hb') { S.peerHb = true; checkPeerPv(msg.pv); return; }
         if (msg.t === 'bye') { conn.byeReceived = true; return; }
+        if (msg.t === 'profile?') { sendCtl(myProfileMsg()); return; }
         if (msg.t === 'hello') { S.friend = String(msg.name || '').slice(0, 24) || 'your friend'; takePeerProfile(msg); log('player said hello'); }
         if (msg.t === 'stat') { S.playerStat = Object.assign(S.playerStat || {}, msg); return; }
         if (msg.t === 'updating') {
@@ -1752,19 +1789,23 @@
     store.set('app.turn', url ? { url, user: $('turn-user').value.trim(), pass: $('turn-pass').value } : null);
     store.set('app.relayOnly', $('relay-only').checked);
     const n = $('settings-name').value.trim().slice(0, 24);
+    const before = JSON.stringify([S.name, S.avatar]);
     if (n) { S.name = n; store.set('app.name', n); $('name').value = n; }
     if (S.pendingAvatar) { S.avatar = S.pendingAvatar; store.set('app.avatar', S.avatar); }
+    const profileChanged = JSON.stringify([S.name, S.avatar]) !== before;
+    if (profileChanged) bumpProfile();
     store.set('app.markSeconds', Number($('mark-seconds').value) || 3);
     renderChips();
-    if (S.conn && S.conn.open) S.conn.send(myProfileMsg());
+    if (profileChanged) sendCtl(myProfileMsg());
     $('settings').close();
-    log('settings saved (applies to the next session)');
+    log(profileChanged ? 'settings saved; profile sent to friend' : 'settings saved');
   });
 
   // Avatar: saved one, else a random built-in (saved so it stays the same).
+  S.profileVer = store.get('app.profileVer', 0) || Date.now();
   S.avatar = window.Profile.sanitize(store.get('app.avatar', null));
   if (!S.avatar) { S.avatar = window.Profile.randomDefault(); store.set('app.avatar', S.avatar); }
-  window.Profile.picker($('avatar-picker-name'), () => S.avatar, (a) => { S.avatar = a; store.set('app.avatar', a); renderChips(); });
+  window.Profile.picker($('avatar-picker-name'), () => S.avatar, (a) => { S.avatar = a; store.set('app.avatar', a); bumpProfile(); renderChips(); sendCtl(myProfileMsg()); });
 
   // Product name everywhere in the page comes from brand.json.
   document.title = NAME;

@@ -6,7 +6,7 @@
 //   screen and shows the friend's marks
 const {
   app, BrowserWindow, ipcMain, desktopCapturer, screen,
-  session, systemPreferences, shell, clipboard, globalShortcut,
+  session, systemPreferences, shell, clipboard, globalShortcut, nativeImage,
 } = require('electron');
 const path = require('path');
 const native = require('./native');
@@ -526,6 +526,21 @@ app.whenReady().then(() => {
     ipcMain.on('overlay:active', (_e, active) => {
     overlayActive = !!active;
     track();
+  });
+  // Avatar fallback: decode a picture with the system (macOS reads HEIC), crop
+  // to a square and shrink to 96 px. Only image files; returns a small JPEG.
+  ipcMain.handle('image:avatar', (_e, p) => {
+    try {
+      const file = String(p || '');
+      if (!/\.(png|jpe?g|gif|webp|bmp|tiff?|heic|heif|avif)$/i.test(file)) return null;
+      const img = nativeImage.createFromPath(file);
+      if (img.isEmpty()) return null;
+      const { width, height } = img.getSize();
+      const side = Math.min(width, height);
+      const sq = img.crop({ x: Math.floor((width - side) / 2), y: Math.floor((height - side) / 2), width: side, height: side })
+        .resize({ width: 96, height: 96, quality: 'good' });
+      return `data:image/jpeg;base64,${sq.toJPEG(82).toString('base64')}`;
+    } catch { return null; }
   });
   ipcMain.handle('clipboard:write', (_e, text) => { clipboard.writeText(String(text)); return true; });
   ipcMain.handle('clipboard:read', () => clipboard.readText());
