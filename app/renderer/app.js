@@ -161,6 +161,8 @@
     clearTimers();
     clearInterval(S.statsTimer);
     clearInterval(S.linkWatch);
+    clearInterval(S.sigTimer);
+    S.videoDownSince = null;
     stopHeartbeat();
     clearTimeout(S.relinkTimer);
     S.relinking = false;
@@ -549,6 +551,13 @@
         if (S.conn && S.conn.open && v) {
           S.conn.send({ t: 'vstat', recv: v.receivedFps, decoded: v.fps, shown, dropped: v.droppedFps, decoder: v.encoder });
         }
+        // Video connection itself down (not just a still picture): if it
+        // doesn't come back within 30 s, start the session over.
+        const vstate = pc.connectionState;
+        if (['failed', 'closed', 'disconnected'].includes(vstate)) {
+          if (!S.videoDownSince) S.videoDownSince = Date.now();
+          if (Date.now() - S.videoDownSince > 30000) { autoRejoin(`video connection ${vstate} for 30 s`); return; }
+        } else S.videoDownSince = null;
         const ps = S.playerStat || {};
         let msg = '';
         if (f >= 5 && S.conn && S.conn.open && (f === 5 || f % 8 === 0)) {
@@ -834,19 +843,24 @@
     const peer = new window.Peer(id, peerOptions());
     S.peer = peer;
 
+    let registered = false;
     peer.on('open', () => {
       if (S.peer !== peer) return;
+      // 'open' fires again after every reconnect to the pairing service:
+      // only the first one is the start of sharing.
+      if (registered) return;
+      registered = true;
       log('host peer registered');
       $('code').textContent = S.code;
       $('copy-code').disabled = false; $('copy-invite').disabled = false;
       setStatus($('share-status'), 'Waiting for your friend to enter the code…', 'busy');
     });
     peer.on('connection', (conn) => onViewerConnection(conn));
+    keepSignaling(peer);
     peer.on('disconnected', () => {
       if (S.ended || S.peer !== peer) return;
-      // Losing the signaling server does not affect an existing direct connection.
-      log('signaling disconnected, reconnecting');
-      later(1500, () => { if (!S.ended && S.peer === peer && !peer.destroyed) peer.reconnect(); });
+      // Existing direct connections keep working; the keeper reconnects.
+      log('signaling disconnected');
     });
     peer.on('error', (err) => {
       if (S.peer !== peer) return;
@@ -880,6 +894,46 @@
       }
       setStatus($('share-status'), friendlyPeerError(err), 'bad');
     });
+  }
+
+  // ---------- pairing service (signaling) connection ----------
+  // New video connections are set up through the pairing service, so it must
+  // stay connected for the whole session. Networks change (VPN on/off, Wi-Fi
+  // switch): check every 2 s and reconnect, backing off up to ~12 s.
+  function keepSignaling(peer) {
+    clearInterval(S.sigTimer);
+    let wait = 0;
+    let tries = 0;
+    peer.on('open', () => { if (tries) log('pairing service reconnected'); tries = 0; wait = 0; });
+    S.sigTimer = setInterval(() => {
+      if (S.ended || S.peer !== peer || peer.destroyed) { clearInterval(S.sigTimer); return; }
+      if (!peer.disconnected) return;
+      if (wait > 0) { wait--; return; }
+      tries++;
+      log(`reconnecting to the pairing service (try ${tries})`);
+      try { peer.reconnect(); } catch { /* ignore */ }
+      wait = Math.min(5, tries);
+    }, 2000);
+  }
+
+  // Viewer, last resort: start the session over with the same code (like
+  // typing it in again). Used when the video connection stays down.
+  function autoRejoin(why) {
+    if (S.role !== 'join' || S.ended || S.autoRejoining || !S.code) return;
+    S.autoRejoining = true;
+    const code = S.code;
+    const friend = S.friend;
+    log(`${why}; rejoining the session`);
+    teardown();
+    show('step-join');
+    $('join-code').value = code;
+    $('end').hidden = false;
+    setStatus($('join-status'), `Reconnecting to ${friend || 'your friend'}…`, 'busy');
+    setTimeout(() => {
+      S.autoRejoining = false;
+      if ($('step-join').hidden || $('join-code').value !== code) return; // user left meanwhile
+      joinFriend(code, { rejoinUntil: Date.now() + 90000, friend });
+    }, 1500);
   }
 
   // ---------- second path for drawings: inside the video connection ----------
@@ -1389,8 +1443,13 @@
       else if (ice === 'disconnected' && S.dataDiscAt && Date.now() - S.dataDiscAt > 4000) relinkData('disconnected');
     }, 1000);
 
+    let lookedUp = false;
     peer.on('open', () => {
       if (S.peer !== peer) return;
+      // 'open' fires again after every reconnect to the pairing service:
+      // only the first one starts the join (a second join would be refused).
+      if (lookedUp) return;
+      lookedUp = true;
       log('viewer peer registered, looking up code');
       setStatus($('join-status'), 'Looking for your friend…', 'busy');
       const conn = peer.connect(hostId, {
@@ -1439,10 +1498,10 @@
       call.on('error', (e) => log(`video call error: ${e && e.type}`));
     });
 
+    keepSignaling(peer);
     peer.on('disconnected', () => {
       if (S.ended || S.peer !== peer) return;
       log('signaling disconnected');
-      if (!(S.conn && S.conn.open) && !S.relinking) later(1500, () => { if (!S.ended && S.peer === peer && !peer.destroyed && peer.disconnected) peer.reconnect(); });
     });
     peer.on('error', (err) => {
       if (S.peer !== peer) return;
@@ -1570,7 +1629,17 @@
   setColor(drawState.color, false);
   $('clear').addEventListener('click', () => send({ t: 'clear' }));
   $('refresh-video').addEventListener('click', () => {
-    if (!S.conn || !S.conn.open) return;
+    if (S.peer && S.peer.disconnected && !S.peer.destroyed) {
+      log('refresh: pairing service was disconnected, reconnecting first');
+      try { S.peer.reconnect(); } catch { /* ignore */ }
+    }
+    if (!S.conn || !S.conn.open) { autoRejoin('refresh pressed with no connection'); return; }
+    // If this refresh doesn't bring video back, start the session over.
+    const pressedAt = Date.now();
+    later(20000, () => {
+      const pc = S.call && S.call.peerConnection;
+      if (S.role === 'join' && !S.ended && (!pc || pc.connectionState !== 'connected') && Date.now() - pressedAt >= 19000) autoRejoin('refresh did not bring video back');
+    });
     S.conn.send({ t: 'need-video', why: 'refresh button', manual: true });
     log('asked player to refresh video');
     $('freeze').textContent = 'Refreshing video…';

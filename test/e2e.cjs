@@ -190,6 +190,18 @@ const stub = (name) => `
   await friend.waitForTimeout(5000);
   console.log('after refresh button (player log tail):', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /rebuild|refresh|friend reports/.test(l)).slice(-2))));
   console.log('friend after refresh:', await friend.textContent('#watch-status'));
+  // ---- network change: pairing service lost on both sides, then video dies ----
+  await friend.evaluate(() => window.__app.peer.disconnect());
+  await player.evaluate(() => window.__app.peer.disconnect());
+  await friend.waitForTimeout(6000);
+  console.log('signaling back:', await friend.evaluate(() => !window.__app.peer.disconnected), await player.evaluate(() => !window.__app.peer.disconnected),
+    JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /pairing service/.test(l)).slice(-2))));
+  const t1 = Date.now();
+  await friend.evaluate(() => window.__app.call.peerConnection.close());
+  await friend.waitForFunction(() => /rejoining the session/.test(window.__app.log.join('\n')), null, { timeout: 45000 }).catch(() => {});
+  await friend.waitForFunction(() => !document.getElementById('step-watch').hidden && document.getElementById('video').videoWidth > 0 && window.__app.call && window.__app.call.peerConnection.connectionState === 'connected', null, { timeout: 40000 }).catch(() => {});
+  console.log('dead video -> auto rejoin:', JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /rejoining|video stream received/.test(l)).slice(-2))), 'watching again:', await friend.evaluate(() => !document.getElementById('step-watch').hidden), 'after', Math.round((Date.now() - t1) / 1000), 's');
+  await friend.waitForTimeout(3000);
   // ---- emoji reactions ----
   await friend.click('#react-btn');
   console.log('react menu open:', await friend.evaluate(() => !document.getElementById('react-menu').hidden), 'items', await friend.locator('#react-menu button').count());
