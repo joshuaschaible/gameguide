@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('bridge', {
   onOverlayTrack: (fn) => ipcRenderer.on('overlay:track', (_e, v) => fn(v)),
   overlayActive: (active) => ipcRenderer.send('overlay:active', !!active),
   onToast: (fn) => ipcRenderer.on('overlay:toast', (_e, t) => fn(t)),
+  onOverlayFrame: (fn) => ipcRenderer.on('overlay:frame', (_e, f) => fn(f)),
   onReceipt: (fn) => ipcRenderer.on('overlay:receipt', (_e, st) => fn(st)),
   onLog: (fn) => ipcRenderer.on('app:log', (_e, line) => fn(line)),
   onToggleSound: (fn) => ipcRenderer.on('overlay:toggleSound', () => fn()),

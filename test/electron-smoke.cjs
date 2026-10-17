@@ -41,6 +41,14 @@ const path = require('path');
       await win.evaluate(() => { window.bridge.draw({ t: 'start', id: 'a', x: 0.1, y: 0.1, c: '#ff0000' }); window.bridge.draw({ t: 'move', id: 'a', x: 0.9, y: 0.9 }); window.bridge.draw({ t: 'end', id: 'a' }); });
       await ov.waitForTimeout(300);
       console.log('overlay visible with a mark:', await vis());
+      console.log('placement log:', JSON.stringify(await win.evaluate(() => window.__app.log.filter((l) => /overlay: game area/.test(l)).slice(-1))));
+      // simulate macOS pushing the layer 24 px down: canvas must shift back up
+      await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().find((x) => x.getTitle() === 'Game Guide overlay'); w.webContents.send('overlay:frame', { fit: true, dx: 0, dy: 24, w: 800, h: 600 }); });
+      await ov.waitForTimeout(200);
+      console.log('canvas after 24px push:', JSON.stringify(await ov.evaluate(() => { const c = document.getElementById('c'); const r = c.getBoundingClientRect(); return { top: r.top, h: r.height, w: r.width }; })));
+      await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().find((x) => x.getTitle() === 'Game Guide overlay'); w.webContents.send('overlay:frame', { fit: false, dx: 0, dy: 0, w: 800, h: 600 }); });
+      await ov.waitForTimeout(200);
+      console.log('canvas after reset:', JSON.stringify(await ov.evaluate(() => { const r = document.getElementById('c').getBoundingClientRect(); return { top: r.top, h: r.height }; })), 'window', JSON.stringify(await ov.evaluate(() => [innerWidth, innerHeight])));
       await ov.screenshot({ path: '/tmp/claude-0/overlay-mark.png' });
       // crash the overlay renderer and make sure it comes back
       await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().find((x) => x.getTitle() === 'Game Guide overlay'); w.webContents.forcefullyCrashRenderer(); });

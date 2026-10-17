@@ -333,6 +333,31 @@ function placeOverlay(bounds) {
     if (isWin) overlayWin.moveTop();
     lastZ = now;
   }
+  correctOverlayFrame(bounds);
+}
+
+// macOS may refuse to put a window where we ask (typically pushing it below
+// the menu bar). Then every mark would land that much lower. Measure where the
+// overlay really is and have it draw shifted back by the difference.
+let lastFrameKey = '';
+let lastPlaceLog = '';
+function correctOverlayFrame(want) {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+  const got = overlayWin.getBounds();
+  const frame = { dx: got.x - want.x, dy: got.y - want.y, w: want.width, h: want.height };
+  if (Math.abs(frame.dx) <= 1 && Math.abs(frame.dy) <= 1) { frame.dx = 0; frame.dy = 0; }
+  // Also correct when the system shrank it (marks would get squashed).
+  frame.fit = !!(frame.dx || frame.dy || Math.abs(got.width - want.width) > 2 || Math.abs(got.height - want.height) > 2);
+  const key = `${frame.fit},${frame.dx},${frame.dy},${frame.w},${frame.h}`;
+  if (key !== lastFrameKey) {
+    lastFrameKey = key;
+    overlayWin.webContents.send('overlay:frame', frame);
+  }
+  const placeLog = `${want.x},${want.y} ${want.width}x${want.height} -> ${got.x},${got.y} ${got.width}x${got.height}`;
+  if (placeLog !== lastPlaceLog) {
+    lastPlaceLog = placeLog;
+    sendLog(`overlay: game area ${want.x},${want.y} ${want.width}x${want.height}; drawing layer at ${got.x},${got.y} ${got.width}x${got.height}${frame.fit ? ` (system moved/resized it by ${frame.dx},${frame.dy}; marks corrected)` : ''}`);
+  }
 }
 
 function boostProcesses() {

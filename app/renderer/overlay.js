@@ -71,5 +71,23 @@
     showToast(next ? `${name} sound on` : `${name} sound off`);
   });
   if (window.bridge.onToast) window.bridge.onToast((t) => showToast(String(t)));
+  // If the system placed this window off from the game area (macOS menu bar),
+  // size/offset the canvas to the game area so marks land where they belong.
+  if (window.bridge.onOverlayFrame) {
+    const canvas = document.getElementById('c');
+    window.bridge.onOverlayFrame((f) => {
+      if (!f || !f.fit) {
+        canvas.style.left = canvas.style.top = canvas.style.width = canvas.style.height = '';
+        canvas.style.inset = '';
+      } else {
+        canvas.style.inset = 'auto';
+        canvas.style.left = `${-f.dx}px`;
+        canvas.style.top = `${-f.dy}px`;
+        canvas.style.width = `${f.w}px`;
+        canvas.style.height = `${f.h}px`;
+      }
+      marks.redraw && marks.redraw();
+    });
+  }
   report();
 })();
