@@ -190,6 +190,23 @@ const stub = (name) => `
   await friend.waitForTimeout(5000);
   console.log('after refresh button (player log tail):', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /rebuild|refresh|friend reports/.test(l)).slice(-2))));
   console.log('friend after refresh:', await friend.textContent('#watch-status'));
+  // ---- never send more than 4K (hardware H.264 limit) ----
+  console.log('send cap check:', JSON.stringify(await player.evaluate(async () => {
+    const S = window.__app;
+    const tr = S.stream.getVideoTracks()[0];
+    const keep = S.native;
+    S.native = { w: 5120, h: 2880 };
+    localStorage.setItem('app.quality', JSON.stringify({ res: 'native', fps: 30, mbps: 12, prefer: 'balanced', codec: 'h264' }));
+    const seen = [];
+    const orig = tr.applyConstraints.bind(tr);
+    tr.applyConstraints = async (c) => { seen.push([c.width.max, c.height.max]); return orig(c); };
+    document.getElementById('q-res').value = 'native';
+    document.getElementById('q-res').dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 300));
+    tr.applyConstraints = orig;
+    S.native = keep;
+    return { constraints: seen };
+  })));
   // ---- drawing link dies, video keeps going (seen on Macs) ----
   const drawBox = await friend.locator('#draw').boundingBox();
   const drawAt = async (fx, fy) => {

@@ -166,6 +166,9 @@
     S.encoderStalls = [];
     S.netCapMbps = null;
     S.lastSendMbps = null;
+    S.lastEncoder = S.lastCodec = '';
+    S.swFixes = [];
+    S.swFallbackSince = null;
     S.overlayTargetId = null;
     const fz = document.getElementById('freeze'); if (fz) fz.hidden = true;
     S.friend = null;
@@ -265,6 +268,16 @@
     store.set('app.qv121', true);
   }
   const RES_HEIGHT = { native: 0, '1440': 1440, '1080': 1080, '900': 900, '720': 720 };
+  const MAX_SEND_W = 3840;
+  const MAX_SEND_H = 2160;
+
+  // True when we asked for H.264 but the browser is encoding VP8/VP9 in
+  // software (it does this silently when the hardware encoder refuses).
+  function softwareFallback() {
+    if (S.role !== 'share' || !S.lastCodec) return false;
+    const wanted = S.codecOverride || quality().codec;
+    return wanted === 'h264' && !/h264/i.test(S.lastCodec) && /libvpx|libaom|software/i.test(S.lastEncoder || '');
+  }
 
   // Downscale/limit the captured screen. Applies live.
   async function applyCaptureQuality() {
@@ -272,15 +285,17 @@
     if (!track || !S.native) return;
     const q = quality();
     const c = { frameRate: { ideal: q.fps, max: q.fps } };
-    const h = RES_HEIGHT[q.res] || 0;
-    if (h && h < S.native.h) {
-      const w = Math.round((S.native.w * h) / S.native.h / 2) * 2;
-      c.width = { ideal: w, max: w };
-      c.height = { ideal: h, max: h };
-    } else {
-      c.width = { ideal: S.native.w, max: S.native.w };
-      c.height = { ideal: S.native.h, max: S.native.h };
-    }
+    let h = RES_HEIGHT[q.res] || S.native.h;
+    if (h > S.native.h) h = S.native.h;
+    let w = Math.round((S.native.w * h) / S.native.h);
+    // Never send more than 4K (3840x2160): hardware H.264 encoders (Mac
+    // VideoToolbox, NVIDIA) can't go past 4096 wide, and the browser then
+    // silently falls back to software VP8 at a few fps.
+    const fit = Math.min(1, MAX_SEND_W / w, MAX_SEND_H / h);
+    w = Math.round((w * fit) / 2) * 2;
+    h = Math.round((h * fit) / 2) * 2;
+    c.width = { ideal: w, max: w };
+    c.height = { ideal: h, max: h };
     try {
       await track.applyConstraints(c);
       const st = track.getSettings();
@@ -461,6 +476,19 @@
         const cf = freeze.check('capture', v && v.sourceFrames);
         const viewer = S.viewerStat && Date.now() - S.viewerStat.at < 5000 ? S.viewerStat : null;
         if (v && v.mbps != null && v.mbps > 0.3) S.lastSendMbps = v.mbps;
+        if (v) { S.lastEncoder = v.encoder || ''; S.lastCodec = v.codec || ''; }
+        if (softwareFallback() && !S.codecOverride && f === 0) {
+          const now = Date.now();
+          S.swFixes = (S.swFixes || []).filter((t) => now - t < 10 * 60000);
+          if (!S.swFallbackSince) S.swFallbackSince = now;
+          // Give it 6 s (it can be a blip), then rebuild; at most twice per 10 min.
+          if (now - S.swFallbackSince > 6000 && S.swFixes.length < 2) {
+            S.swFixes.push(now);
+            S.swFallbackSince = null;
+            log(`video fell back to software ${S.lastCodec} (${S.lastEncoder}), rebuilding to get hardware H.264 back`);
+            restartVideo('software encoder fallback', { kind: 'manual', force: true });
+          }
+        } else S.swFallbackSince = null;
         $('q-stats').textContent = `Sending: ${fmtStats(v, routeCache)}`;
         $('q-pipe').textContent = pipeline(v, viewer);
         let hint = bottleneck(v, viewer, quality(), routeCache);
@@ -527,11 +555,18 @@
       store.set('app.quality', next);
       if (S.netCapMbps) { S.netCapMbps = null; log('session quality limit cleared by settings change'); }
       log(`quality set: ${JSON.stringify(next)}`);
-      if (ev && ev.target && ev.target.id === 'q-codec') {
-        $('q-hint').textContent = S.call ? 'This change applies the next time your friend joins.' : '';
-      }
       await applyCaptureQuality();
       if (S.call) await applySenderQuality(S.call.peerConnection);
+      if (S.role === 'share' && S.call) {
+        const codecChanged = ev && ev.target && ev.target.id === 'q-codec';
+        const stuckSoftware = softwareFallback();
+        if (codecChanged || S.codecOverride || stuckSoftware) {
+          S.codecOverride = null;
+          S.encoderStalls = [];
+          $('q-hint').textContent = 'Applying… the video blinks for a second.';
+          restartVideo(codecChanged ? 'codec changed in settings' : 'settings changed, getting the hardware encoder back', { kind: 'manual', force: true });
+        }
+      }
     };
     ['q-res', 'q-fps', 'q-mbps', 'q-prefer', 'q-codec'].forEach((id) => $(id).addEventListener('change', save));
   }
