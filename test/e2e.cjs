@@ -216,6 +216,20 @@ const stub = (name) => `
   };
   const starts = () => player.evaluate(() => window.__drawn.filter((m) => m.t === 'start').length);
   console.log('heartbeat seen:', await friend.evaluate(() => window.__app.peerHb), await player.evaluate(() => window.__app.peerHb));
+  // second drawing path inside the video connection
+  console.log('video-path drawing channel open:', await friend.evaluate(() => !!(window.__app.drawDc && window.__app.drawDc.readyState === 'open')), await player.evaluate(() => !!(window.__app.drawDc && window.__app.drawDc.readyState === 'open')));
+  let n0 = await starts();
+  await drawAt(0.3, 0.6);
+  await friend.waitForTimeout(600);
+  console.log('both paths up: starts added =', (await starts()) - n0, '(want 1, no duplicates)');
+  // drawing link silently dead (friend's sends vanish): mark must still arrive right away
+  await friend.evaluate(() => { window.__realSend = window.__app.conn.send.bind(window.__app.conn); window.__app.conn.send = () => {}; });
+  n0 = await starts();
+  const t0 = Date.now();
+  await drawAt(0.35, 0.65);
+  await player.waitForFunction((n) => window.__drawn.filter((m) => m.t === 'start').length > n, n0, { timeout: 5000 }).catch(() => {});
+  console.log('drawing link dead: mark arrived via video path:', (await starts()) - n0 === 1, 'in', Date.now() - t0, 'ms');
+  await friend.evaluate(() => { window.__app.conn.send = window.__realSend; });
   const callBefore = await player.evaluate(() => { window.__callRef = window.__app.call; return !!window.__callRef; });
   // 1) silent death: the player stops answering on the drawing link
   await player.evaluate(() => { window.__app.conn.send = () => {}; });

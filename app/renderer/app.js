@@ -167,6 +167,11 @@
     S.netCapMbps = null;
     S.lastSendMbps = null;
     S.lastEncoder = S.lastCodec = '';
+    S.drawDc = null;
+    S.drawSession = null;
+    S.drawSeq = 0;
+    if (S.rx) clearTimeout(S.rx.timer);
+    S.rx = null;
     S.swFixes = [];
     S.swFallbackSince = null;
     S.overlayTargetId = null;
@@ -849,6 +854,72 @@
     });
   }
 
+  // ---------- second path for drawings: inside the video connection ----------
+  // The video connection already has a data (SCTP) channel inside it, so we
+  // open one more, pre-agreed channel there ("negotiated", same id on both
+  // sides, no extra handshake). Each mark goes out on BOTH the drawing link
+  // and this channel; the player uses whichever copy arrives first. On some
+  // networks one of the two connections keeps dropping, and this way marks
+  // still get through instantly on the other.
+  const DRAW_DC_ID = 100;
+  function attachDrawChannel(pc) {
+    if (!pc || pc.ggDrawDc) return;
+    try {
+      const dc = pc.createDataChannel('gg-draw', { negotiated: true, id: DRAW_DC_ID, ordered: true });
+      pc.ggDrawDc = dc;
+      dc.onopen = () => { S.drawDc = dc; log('drawing path inside the video connection is open'); };
+      dc.onclose = () => { if (S.drawDc === dc) S.drawDc = null; };
+      dc.onmessage = (ev) => {
+        let m = null;
+        try { m = JSON.parse(ev.data); } catch { return; }
+        if (m && S.role === 'share' && DRAW_TYPES.includes(m.t)) receiveDraw(m);
+      };
+    } catch (e) {
+      log(`no drawing path inside the video connection (${e && e.message})`);
+    }
+  }
+  const DRAW_TYPES = ['start', 'move', 'end', 'ping', 'clear'];
+
+  // Viewer: number each mark message and send it on every open path.
+  function sendDrawMsg(msg) {
+    if (!S.drawSession) S.drawSession = Math.random().toString(36).slice(2, 8);
+    const m = { ...msg, s: S.drawSession, q: (S.drawSeq = (S.drawSeq || 0) + 1) };
+    let sent = 0;
+    try { if (S.conn && S.conn.open) { S.conn.send(m); sent++; } } catch { /* ignore */ }
+    try { if (S.drawDc && S.drawDc.readyState === 'open') { S.drawDc.send(JSON.stringify(m)); sent++; } } catch { /* ignore */ }
+    if (!sent && !S.noPathLogged) { S.noPathLogged = true; log('mark not sent: no drawing path open right now'); }
+    if (sent) S.noPathLogged = false;
+  }
+
+  // Player: apply each numbered mark message once, in order, whichever path
+  // it came on. A gap (message lost with a dying path) is skipped after 300 ms.
+  function receiveDraw(m) {
+    if (typeof m.q !== 'number' || !m.s) { bridge.draw(m); return; } // older friend
+    let R = S.rx;
+    if (!R || R.s !== m.s) R = S.rx = { s: m.s, next: m.q, buf: new Map(), timer: null };
+    if (m.q < R.next || R.buf.has(m.q)) return; // already have it
+    R.buf.set(m.q, m);
+    flushDraw(R);
+  }
+  function flushDraw(R) {
+    while (R.buf.has(R.next)) {
+      const m = R.buf.get(R.next);
+      R.buf.delete(R.next);
+      R.next++;
+      const { s, q, ...plain } = m;
+      bridge.draw(plain);
+    }
+    clearTimeout(R.timer);
+    R.timer = null;
+    if (R.buf.size) {
+      R.timer = setTimeout(() => {
+        if (S.rx !== R || !R.buf.size) return;
+        R.next = Math.min(...R.buf.keys());
+        flushDraw(R);
+      }, 300);
+    }
+  }
+
   // Drawings travel on their own data connection. If the network drops it
   // (seen on Macs: video keeps flowing, data link dies), the friend rebuilds
   // just this link and the video call stays up.
@@ -957,7 +1028,7 @@
       return;
     }
     if (msg.t === 'vstat') { S.viewerStat = { recv: num(msg.recv), shown: num(msg.shown), decoded: num(msg.decoded), at: Date.now() }; return; }
-    if (['start', 'move', 'end', 'ping', 'clear'].includes(msg.t)) bridge.draw(msg);
+    if (DRAW_TYPES.includes(msg.t)) receiveDraw(msg);
   }
 
   function hostClosed(conn) {
@@ -977,6 +1048,9 @@
 
   function viewerGone() {
     log('viewer left');
+    S.drawDc = null;
+    if (S.rx) clearTimeout(S.rx.timer);
+    S.rx = null;
     S.awaitRelink = null;
     clearTimeout(S.relinkTimer);
     stopHeartbeat();
@@ -1029,6 +1103,7 @@
       metadata: { name: S.name, codec, mbps },
       sdpTransform: (sdp) => tuneSdp(sdp, codec, mbps),
     });
+    attachDrawChannel(call.peerConnection);
     S.call = call;
     const pc = call.peerConnection;
     watchPc(pc, 'video');
@@ -1307,6 +1382,7 @@
       const codec = ['h264', 'vp9', 'vp8', 'av1', 'auto'].includes(md.codec) ? md.codec : 'auto';
       const mbps = Number(md.mbps) > 0 && Number(md.mbps) <= 50 ? Number(md.mbps) : 12;
       call.answer(undefined, { sdpTransform: (sdp) => tuneSdp(sdp, codec, mbps) });
+      attachDrawChannel(call.peerConnection);
       watchPc(call.peerConnection, 'video');
       call.on('stream', (stream) => {
         log('video stream received');
@@ -1405,7 +1481,7 @@
   function inside(p) { return p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1; }
   function send(msg) {
     localMarks.apply(msg);
-    if (S.conn && S.conn.open) S.conn.send(msg);
+    sendDrawMsg(msg);
   }
   const r4 = (n) => Math.round(n * 10000) / 10000;
 
