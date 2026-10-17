@@ -157,6 +157,14 @@ const stub = (name) => `
   await friend.waitForTimeout(9000);
   console.log('video-dead recovery log (player):', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /rebuild|stalled|friend reports/.test(l)))));
   console.log('friend after video rebuild:', await friend.textContent('#watch-status'));
+  // simulate the network dropping the video twice: must rebuild, cap bitrate, and NOT switch codec
+  for (let i = 0; i < 2; i++) {
+    await player.waitForFunction(() => window.__app.call && window.__app.call.peerConnection, null, { timeout: 20000 });
+    await player.evaluate(() => { window.__app.lastSendMbps = 9; const pc = window.__app.call.peerConnection; Object.defineProperty(pc, 'iceConnectionState', { get: () => 'failed', configurable: true }); pc.dispatchEvent(new Event('iceconnectionstatechange')); });
+    await player.waitForTimeout(13000);
+  }
+  console.log('network-drop log:', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /network dropped|capping|switching codec|rebuilding video connection \(video/.test(l)))));
+  console.log('after drops: cap', await player.evaluate(() => window.__app.netCapMbps), 'codecOverride', await player.evaluate(() => window.__app.codecOverride), '| friend:', await friend.textContent('#watch-status'));
   // manual refresh button
   await friend.waitForTimeout(11000);
   await friend.click('#refresh-video');

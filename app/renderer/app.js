@@ -146,6 +146,9 @@
     S.trackState = null;
     S.codecOverride = null;
     S.videoRecoveries = [];
+    S.encoderStalls = [];
+    S.netCapMbps = null;
+    S.lastSendMbps = null;
     S.overlayTargetId = null;
     const fz = document.getElementById('freeze'); if (fz) fz.hidden = true;
     S.friend = null;
@@ -219,6 +222,12 @@
   // =====================================================================
   const QUALITY_DEFAULTS = { res: '1080', fps: 60, mbps: 12, prefer: 'balanced', codec: 'h264' };
   function quality() { return Object.assign({}, QUALITY_DEFAULTS, store.get('app.quality', {}) || {}); }
+  // The bitrate actually used: the chosen max, lowered for this session when the
+  // network keeps dropping the video (S.netCapMbps).
+  function effectiveMbps() {
+    const q = quality();
+    return S.netCapMbps ? Math.min(q.mbps, S.netCapMbps) : q.mbps;
+  }
   // 1.2.1: "sharp" could stall the frame rate; move 1.2.0 users to balanced once.
   if (!store.get('app.qv121', false)) {
     const old = store.get('app.quality', null);
@@ -258,7 +267,7 @@
       try {
         const p = sender.getParameters();
         if (!p.encodings || !p.encodings.length) p.encodings = [{}];
-        p.encodings[0].maxBitrate = q.mbps * 1000000;
+        p.encodings[0].maxBitrate = effectiveMbps() * 1000000;
         p.encodings[0].maxFramerate = q.fps;
         p.encodings[0].scaleResolutionDownBy = 1;
         p.encodings[0].priority = 'high';
@@ -266,7 +275,7 @@
         // sharp: keep resolution, drop frames under pressure. smooth: the opposite.
         p.degradationPreference = { sharp: 'maintain-resolution', smooth: 'maintain-framerate' }[q.prefer] || 'balanced';
         await sender.setParameters(p);
-        log(`encoder: max ${q.mbps} Mbps, ${q.fps} fps, ${q.prefer}`);
+        log(`encoder: max ${effectiveMbps()} Mbps, ${q.fps} fps, ${q.prefer}`);
       } catch (e) { log(`encoder settings skipped: ${e && e.message}`); }
     }
   }
@@ -421,6 +430,7 @@
         const f = freeze.check('send', v && v.frames);
         const cf = freeze.check('capture', v && v.sourceFrames);
         const viewer = S.viewerStat && Date.now() - S.viewerStat.at < 5000 ? S.viewerStat : null;
+        if (v && v.mbps != null && v.mbps > 0.3) S.lastSendMbps = v.mbps;
         $('q-stats').textContent = `Sending: ${fmtStats(v, routeCache)}`;
         $('q-pipe').textContent = pipeline(v, viewer);
         let hint = bottleneck(v, viewer, quality(), routeCache);
@@ -431,7 +441,7 @@
           hint = 'Your game is minimized, so there is nothing to send. It resumes when you go back to the game.';
         } else if (f >= 2 && cf === 0) {
           hint = 'Video got stuck. Fixing it…';
-          restartVideo(`encoder/sending stalled ${f * 2}s, capture ok`);
+          restartVideo(`encoder/sending stalled ${f * 2}s, capture ok`, { kind: 'encoder' });
         }
         if (cf === 3 || f === 3) log(`freeze detected on player (capture stalled: ${cf >= 3}, send stalled: ${f >= 3}, limit: ${v && v.limit})`);
         if (n % 5 === 0 && v) log(`stats: ${fmtStats(v, routeCache)} | ${pipeline(v, viewer)} | limit ${v.limit} | encoder ${v.encoder}`);
@@ -450,7 +460,7 @@
         }
         const ps = S.playerStat || {};
         let msg = '';
-        if (f >= 3 && S.conn && S.conn.open && (f === 3 || f % 6 === 0)) {
+        if (f >= 5 && S.conn && S.conn.open && (f === 5 || f % 8 === 0)) {
           // Frozen while drawings still work: ask the player to rebuild video.
           S.conn.send({ t: 'need-video', why: `no frames ${f * 2}s` });
           log(`no frames for ${f * 2}s, asked player to rebuild video`);
@@ -485,6 +495,7 @@
         codec: $('q-codec').value,
       };
       store.set('app.quality', next);
+      if (S.netCapMbps) { S.netCapMbps = null; log('session quality limit cleared by settings change'); }
       log(`quality set: ${JSON.stringify(next)}`);
       if (ev && ev.target && ev.target.id === 'q-codec') {
         $('q-hint').textContent = S.call ? 'This change applies the next time your friend joins.' : '';
@@ -792,6 +803,8 @@
       conn.send({ ...myProfileMsg(), codec: q.codec, mbps: q.mbps });
       S.codecOverride = null;
       S.videoRecoveries = [];
+      S.encoderStalls = [];
+      S.netCapMbps = null;
       const call = startVideoCall(conn);
       $('share-title').textContent = `${viewerName} is watching`;
       setStatus($('share-status'), `Connected. ${viewerName} can see your screen and draw on it.`, 'good');
@@ -808,7 +821,12 @@
       if (msg.t === 'hello') { takePeerProfile(msg); return; }
       if (msg.t === 'need-video') {
         log(`friend reports no video (${String(msg.why || '').slice(0, 40)})`);
-        restartVideo(`friend reports no video: ${String(msg.why || '').slice(0, 40)}`, { freshCapture: true, force: !!msg.manual });
+        const captureStuck = (freeze.stuck.capture || 0) >= 2;
+        restartVideo(`friend reports no video: ${String(msg.why || '').slice(0, 40)}`, {
+          kind: msg.manual ? 'manual' : captureStuck ? 'capture' : 'network',
+          freshCapture: captureStuck || !!msg.manual,
+          force: !!msg.manual,
+        });
         return;
       }
       if (msg.t === 'vstat') { S.viewerStat = { recv: num(msg.recv), shown: num(msg.shown), decoded: num(msg.decoded), at: Date.now() }; return; }
@@ -839,9 +857,10 @@
   function startVideoCall(conn) {
     const q = quality();
     const codec = S.codecOverride || q.codec;
+    const mbps = effectiveMbps();
     const call = S.peer.call(conn.peer, S.stream, {
-      metadata: { name: S.name, codec, mbps: q.mbps },
-      sdpTransform: (sdp) => tuneSdp(sdp, codec, q.mbps),
+      metadata: { name: S.name, codec, mbps },
+      sdpTransform: (sdp) => tuneSdp(sdp, codec, mbps),
     });
     S.call = call;
     const pc = call.peerConnection;
@@ -854,10 +873,11 @@
     let badSince = 0;
     pc.addEventListener('iceconnectionstatechange', () => {
       const st = pc.iceConnectionState;
-      if (st === 'failed') restartVideo('video connection failed');
+      if (st === 'failed') restartVideo('video connection failed', { kind: 'network' });
       if (st === 'disconnected') {
         badSince = Date.now();
-        later(5000, () => { if (S.call === call && pc.iceConnectionState === 'disconnected' && Date.now() - badSince >= 4900) restartVideo('video connection lost'); });
+        // Short drops often heal by themselves; only rebuild if it stays down.
+        later(8000, () => { if (S.call === call && pc.iceConnectionState === 'disconnected' && Date.now() - badSince >= 7900) restartVideo('video connection lost', { kind: 'network' }); });
       }
     });
     return call;
@@ -867,14 +887,38 @@
   async function restartVideo(reason, opts) {
     if (S.ended || S.role !== 'share' || !S.conn || !S.conn.open || !S.stream) return;
     const now = Date.now();
-    if (now - lastVideoRestart < 10000 && !(opts && opts.force)) return;
+    if (now - lastVideoRestart < 10000 && !(opts && opts.force)) {
+      // Too soon after the last rebuild: retry once the 10 s gap is over,
+      // unless the video has recovered by then.
+      if (!S.videoRetryPending) {
+        S.videoRetryPending = true;
+        later(10000 - (now - lastVideoRestart) + 200, () => {
+          S.videoRetryPending = false;
+          const pc = S.call && S.call.peerConnection;
+          const healthy = pc && ['connected', 'completed'].includes(pc.iceConnectionState) && S.call.open;
+          if (!healthy) restartVideo(`${reason} (retry)`, opts);
+        });
+      }
+      return;
+    }
     lastVideoRestart = now;
-    // Repeated trouble: fall back from hardware H.264 to the most robust codec.
-    S.videoRecoveries = (S.videoRecoveries || []).filter((t) => now - t < 180000);
-    S.videoRecoveries.push(now);
-    if (S.videoRecoveries.length >= 2 && quality().codec !== 'vp8' && S.codecOverride !== 'vp8') {
-      S.codecOverride = 'vp8';
-      log('video keeps failing, switching codec to VP8 for this session');
+    const kind = (opts && opts.kind) || 'network';
+    if (kind === 'encoder') {
+      // The encoder itself keeps hanging: fall back to the most robust codec.
+      S.encoderStalls = (S.encoderStalls || []).filter((t) => now - t < 180000);
+      S.encoderStalls.push(now);
+      if (S.encoderStalls.length >= 2 && quality().codec !== 'vp8' && S.codecOverride !== 'vp8') {
+        S.codecOverride = 'vp8';
+        log('encoder keeps hanging, switching codec to VP8 for this session');
+      }
+    } else if (kind === 'network') {
+      // The link dropped under load: come back below the rate that broke it,
+      // instead of climbing straight back up and dropping again.
+      const was = effectiveMbps();
+      const sent = S.lastSendMbps && S.lastSendMbps > 0.5 ? S.lastSendMbps : was;
+      S.netCapMbps = Math.max(3, Math.round(Math.min(was, sent) * 0.7));
+      log(`network dropped the video at ~${sent.toFixed(1)} Mbps; capping this session at ${S.netCapMbps} Mbps`);
+      $('q-hint').textContent = `The connection kept dropping, so quality is limited to ${S.netCapMbps} Mbps for this session. Change "Max quality" to reset it.`;
     }
     log(`rebuilding video connection (${reason})`);
     if (opts && opts.freshCapture && S.source) {
@@ -1240,7 +1284,7 @@
     setStatus($('share-status'), 'Restarting stream…', 'busy');
     try {
       if (S.conn && S.conn.open) {
-        await restartVideo('manual restart', { freshCapture: true, force: true });
+        await restartVideo('manual restart', { kind: 'manual', freshCapture: true, force: true });
       } else {
         lastRestart = 0;
         await restartCapture('manual restart');
