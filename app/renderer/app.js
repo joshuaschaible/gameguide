@@ -549,6 +549,7 @@
           b.appendChild(tag);
         }
         const img = document.createElement('img');
+        img.className = 'src-thumb';
         img.alt = '';
         img.src = src.thumb;
         b.appendChild(img);
