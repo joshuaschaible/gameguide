@@ -544,6 +544,9 @@ app.whenReady().then(() => {
     checkUpdates(false);
   };
   mainWin.webContents.once('did-finish-load', () => {
+    // What the update helper did last time (Windows), so it shows in Copy details.
+    const swapLog = updater.takeUpdateLog();
+    if (swapLog) setTimeout(() => swapLog.split(/\r?\n/).filter(Boolean).forEach((l) => sendLog(`update helper: ${l.trim()}`)), 1500);
     setTimeout(() => maybeCheck(0), 2500);
     setInterval(() => maybeCheck(UPDATE_INTERVAL_MS - 5000), UPDATE_INTERVAL_MS);
   });

@@ -8,13 +8,14 @@
 // Release assets must be named (NAME = brand.json "name", spaces -> dashes):
 //   <NAME>-Windows-v<version>.zip  (contains "<name>/<name>.exe ...")
 //   <NAME>-Mac-v<version>.zip      (contains "<name>.app")
-const { app, net, shell } = require('electron');
+const { app, net, shell, BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
 const BRAND = require('./brand.json');
+const { windowsSwapScript, runCmdHidden } = require('./swapscript');
 const CONFIG = BRAND.github || {};
 const ASSET_PREFIX = BRAND.name.replace(/\s+/g, '-');
 const UA = `${ASSET_PREFIX}-Updater`;
@@ -151,35 +152,22 @@ async function install(info, onProgress) {
   if (!fs.existsSync(fresh)) throw new Error(`update zip is missing "${target.fromZip}"`);
   if (onProgress) onProgress({ stage: 'restart', progress: 1 });
   launchSwapper(target.current, fresh, staging, work);
-  setTimeout(() => app.exit(0), 900); // lets the renderer tell the other player first
+  // 900 ms lets the renderer tell the other player first. Windows are destroyed
+  // first so nothing (capture, overlay) can hold up the exit.
+  setTimeout(() => {
+    for (const w of BrowserWindow.getAllWindows()) { try { w.destroy(); } catch { /* ignore */ } }
+    app.exit(0);
+  }, 900);
 }
 
 function launchSwapper(current, fresh, staging, work) {
   const pid = process.pid;
   if (isWin) {
-    const exe = path.join(current, `${BRAND.name}.exe`);
     const script = path.join(work, 'swap.cmd');
-    const q = (s) => `"${s}"`;
-    fs.writeFileSync(script, [
-      '@echo off',
-      ':wait',
-      `tasklist /FI "PID eq ${pid}" 2>NUL | find "${pid}" >NUL`,
-      'if not errorlevel 1 ( ping -n 2 127.0.0.1 >NUL & goto wait )',
-      'ping -n 2 127.0.0.1 >NUL',
-      // Mirror the new build over the old folder (keeps the folder path the same).
-      `robocopy ${q(fresh)} ${q(current)} /MIR /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >NUL`,
-      `rmdir /S /Q ${q(staging)}`,
-      `start "" ${q(exe)}`,
-      `rmdir /S /Q ${q(work)}`,
-    ].join('\r\n'));
-    const cmd = process.env.ComSpec || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe');
-    try {
-      // No window at all (see native.js runHidden).
-      require('./native').runHidden(cmd, `"${cmd}" /d /s /c ""${script}""`, work);
-    } catch {
-      // Fallback: works, but Windows may show a black console window briefly.
-      spawn(cmd, ['/d', '/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-    }
+    fs.writeFileSync(script, windowsSwapScript({
+      pid, current, fresh, staging, work, exeName: `${BRAND.name}.exe`, log: updateLogPath(),
+    }));
+    runCmdHidden(script, work, require('./native'));
     return;
   }
   // macOS (and Linux test runs): plain shell.
@@ -200,6 +188,20 @@ function launchSwapper(current, fresh, staging, work) {
   spawn('/bin/sh', [script], { detached: true, stdio: 'ignore' }).unref();
 }
 
+// The Windows swap helper writes what it did here; the next launch shows it in
+// the app's log (and Copy details), then deletes it.
+function updateLogPath() {
+  return path.join(os.tmpdir(), `${BRAND.id}-update.log`);
+}
+function takeUpdateLog() {
+  const p = updateLogPath();
+  try {
+    const text = fs.readFileSync(p, 'utf8').trim();
+    fs.unlinkSync(p);
+    return text;
+  } catch { return ''; }
+}
+
 // Invite page: brand.json "inviteBase" (custom domain later), else GitHub Pages.
 function inviteBase() {
   if (BRAND.inviteBase) return BRAND.inviteBase;
@@ -209,4 +211,4 @@ function downloadPage() {
   return CONFIG.owner ? `https://github.com/${CONFIG.owner}/${CONFIG.repo}/releases/latest` : '';
 }
 
-module.exports = { check, install, enabled, cmpVersion, inviteBase, downloadPage, openReleasePage: (u) => shell.openExternal(u) };
+module.exports = { check, install, enabled, cmpVersion, inviteBase, downloadPage, takeUpdateLog, openReleasePage: (u) => shell.openExternal(u) };
