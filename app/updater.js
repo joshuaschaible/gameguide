@@ -151,7 +151,7 @@ async function install(info, onProgress) {
   if (!fs.existsSync(fresh)) throw new Error(`update zip is missing "${target.fromZip}"`);
   if (onProgress) onProgress({ stage: 'restart', progress: 1 });
   launchSwapper(target.current, fresh, staging, work);
-  setTimeout(() => app.exit(0), 300);
+  setTimeout(() => app.exit(0), 900); // lets the renderer tell the other player first
 }
 
 function launchSwapper(current, fresh, staging, work) {

@@ -142,6 +142,7 @@
     S.viewerStat = null;
     S.source = null;
     S.peerProfile = null;
+    S.peerUpdating = false;
     if (document.getElementById('chips')) renderChips();
     S.trackState = null;
     S.codecOverride = null;
@@ -158,6 +159,8 @@
   }
 
   function endSession(note) {
+    S.awaitReturn = null;
+    try { localStorage.removeItem('app.resume'); } catch { /* ignore */ }
     log(`session ended${note ? `: ${note}` : ''}`);
     teardown();
     S.role = null;
@@ -604,7 +607,7 @@
     $('source-name').textContent = source.kind === 'window' ? `Sharing: ${source.name}` : `Sharing: ${source.name}`;
   }
 
-  async function startSharing(source) {
+  async function startSharing(source, opts) {
     teardown();
     S.ended = false;
     S.role = 'share';
@@ -627,7 +630,7 @@
     await applyCaptureQuality();
     await bridge.openOverlay({ kind: source.kind, id: source.id, displayId: source.displayId });
     S.overlayTargetId = source.id;
-    openHostPeer(0);
+    openHostPeer(0, opts && opts.code);
   }
 
   // Swap what's being shared without dropping the friend.
@@ -725,9 +728,10 @@
     return Array.from(a, (n) => CODE_CHARS[n % CODE_CHARS.length]).join('');
   }
 
-  function openHostPeer(attempt) {
+  // fixedCode: reopen the same code after an update so the friend can rejoin.
+  function openHostPeer(attempt, fixedCode) {
     if (S.ended) return;
-    S.code = makeCode();
+    S.code = fixedCode || makeCode();
     const id = ID_PREFIX + S.code.toLowerCase();
     log(`opening host peer (attempt ${attempt + 1})`);
     setStatus($('share-status'), 'Getting your code…', 'busy');
@@ -751,7 +755,15 @@
     peer.on('error', (err) => {
       if (S.peer !== peer) return;
       log(`host peer error: ${err.type} ${err.message || ''}`);
-      if (err.type === 'unavailable-id' && attempt < 5) {
+      if (err.type === 'unavailable-id' && fixedCode && attempt < 12) {
+        // The pairing service still remembers the old copy of this code for a
+        // few seconds after a restart: keep trying the same code.
+        peer.destroy();
+        setStatus($('share-status'), 'Getting your code back…', 'busy');
+        later(2500, () => openHostPeer(attempt + 1, fixedCode));
+        return;
+      }
+      if (err.type === 'unavailable-id' && attempt < 17) {
         peer.destroy();
         openHostPeer(attempt + 1);
         return;
@@ -818,7 +830,8 @@
     });
     conn.on('data', (msg) => {
       if (!msg || typeof msg !== 'object') return;
-      if (msg.t === 'hello') { takePeerProfile(msg); return; }
+      if (msg.t === 'hello') { takePeerProfile(msg); S.peerUpdating = false; return; }
+      if (msg.t === 'updating') { S.peerUpdating = true; log('friend is installing an update'); return; }
       if (msg.t === 'need-video') {
         log(`friend reports no video (${String(msg.why || '').slice(0, 40)})`);
         const captureStuck = (freeze.stuck.capture || 0) >= 2;
@@ -846,7 +859,12 @@
       $('q-hint').textContent = '';
       if (S.ended) return;
       $('share-title').textContent = 'Send this code to your friend';
-      setStatus($('share-status'), `${S.friend || 'Your friend'} left. Waiting for someone to enter the code…`, 'busy');
+      if (S.peerUpdating) {
+        setStatus($('share-status'), `${S.friend || 'Your friend'} is updating and will reconnect by themselves…`, 'busy');
+        S.peerUpdating = false;
+      } else {
+        setStatus($('share-status'), `${S.friend || 'Your friend'} left. Waiting for someone to enter the code…`, 'busy');
+      }
       S.friend = null;
     });
     conn.on('error', (e) => log(`data connection error: ${e && e.type}`));
@@ -950,8 +968,10 @@
     return String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   }
 
-  function joinFriend(raw) {
+  // opts.rejoinUntil: keep retrying this code until then (friend is updating).
+  function joinFriend(raw, opts) {
     const code = normalizeCode(raw);
+    const rejoinUntil = opts && opts.rejoinUntil;
     if (code.length !== 6) {
       setStatus($('join-status'), 'Codes are 6 letters and numbers. Check the code and try again.', 'bad');
       return;
@@ -969,6 +989,19 @@
 
     const fail = (text) => {
       if (S.peer !== peer) return;
+      if (rejoinUntil && Date.now() < rejoinUntil) {
+        log(`rejoin attempt failed (${text}); trying again`);
+        const who = (opts && opts.friend) || 'your friend';
+        teardown();
+        S.ended = false;
+        S.role = 'join';
+        show('step-join');
+        $('join-code').value = code;
+        $('end').hidden = false;
+        setStatus($('join-status'), `Waiting for ${who} to come back (updating)…`, 'busy');
+        later(4000, () => { if (!S.ended && S.role === 'join') joinFriend(code, opts); });
+        return;
+      }
       log(`join failed: ${text}`);
       teardown();
       $('join-btn').disabled = false;
@@ -1006,12 +1039,28 @@
         if (!msg || typeof msg !== 'object') return;
         if (msg.t === 'hello') { S.friend = String(msg.name || '').slice(0, 24) || 'your friend'; takePeerProfile(msg); log('player said hello'); }
         if (msg.t === 'stat') { S.playerStat = Object.assign(S.playerStat || {}, msg); return; }
+        if (msg.t === 'updating') {
+          S.awaitReturn = { code, until: Date.now() + 120000, friend: S.friend };
+          log('player is installing an update');
+          $('freeze').textContent = `${S.friend || 'Your friend'} is updating. Reconnecting automatically…`;
+          $('freeze').hidden = false;
+          return;
+        }
         if (msg.t === 'receipt') { showReceipt(String(msg.state || '')); return; }
         if (msg.t === 'source') { localMarks.apply({ t: 'clear' }); log(`player switched source to "${String(msg.name || '').slice(0, 80)}"`); return; }
         if (msg.t === 'busy') fail('Someone else is already watching this share. Ask your friend for a fresh code.');
       });
       conn.on('close', () => {
         if (S.conn !== conn || S.ended) return;
+        if (S.awaitReturn && Date.now() < S.awaitReturn.until) {
+          const back = S.awaitReturn;
+          log('player is restarting for an update, will rejoin');
+          teardown();
+          show('step-join');
+          $('join-code').value = back.code;
+          joinFriend(back.code, { rejoinUntil: back.until, friend: back.friend });
+          return;
+        }
         log('player ended the connection');
         teardown();
         $('join-btn').disabled = false;
@@ -1036,6 +1085,7 @@
       watchPc(call.peerConnection, 'video');
       call.on('stream', (stream) => {
         log('video stream received');
+        S.awaitReturn = null;
         const v = $('video');
         v.srcObject = stream;
         v.play().catch(() => {});
@@ -1442,13 +1492,14 @@
     if (u.progress) {
       bar.hidden = false; btn.hidden = true;
       const p = u.progress;
+      if (p.stage === 'restart') { saveResume(); tellPeerUpdating(); }
       $('update-text').textContent = p.stage === 'download' ? `Downloading v${u.latest}… ${Math.round(p.progress * 100)}%`
         : p.stage === 'unpack' ? `Installing v${u.latest}…` : `Restarting into v${u.latest}…`;
       return;
     }
     if (u.available) {
       bar.hidden = false; btn.hidden = false; btn.disabled = false;
-      $('update-text').textContent = `${NAME} v${u.latest} is available (you have v${u.current}).${S.ended ? '' : ' Updating ends the current session.'}`;
+      $('update-text').textContent = `${NAME} v${u.latest} is available (you have v${u.current}).${S.ended ? '' : ' Your session reconnects by itself after the update.'}`;
       return;
     }
     if (u.enabled === false) {
@@ -1480,13 +1531,59 @@
     }
   });
 
+  // Remember the session so the new version can pick it back up.
+  function saveResume() {
+    if (S.ended || !S.code || !S.role) { try { localStorage.removeItem('app.resume'); } catch { /* ignore */ } return; }
+    const src = S.source ? { id: S.source.id, name: S.source.name, kind: S.source.kind, displayId: S.source.displayId } : null;
+    store.set('app.resume', { role: S.role, code: S.code, source: src, friend: S.friend, at: Date.now() });
+    log(`saved session (${S.role} ${S.code}) to resume after the update`);
+  }
+  let toldPeerUpdating = false;
+  function tellPeerUpdating() {
+    if (toldPeerUpdating) return;
+    toldPeerUpdating = true;
+    try { if (S.conn && S.conn.open) S.conn.send({ t: 'updating' }); } catch { /* ignore */ }
+  }
   $('update-btn').addEventListener('click', async () => {
     $('update-btn').disabled = true;
     log('installing update');
-    teardown();
+    saveResume();
     const r = await bridge.installUpdate();
-    if (r && !r.ok) showUpdate({ error: r.error });
+    if (r && !r.ok) { try { localStorage.removeItem('app.resume'); } catch { /* ignore */ } showUpdate({ error: r.error }); }
   });
+
+  // After an update restart: pick the session back up (same code, same window).
+  async function resumeSession() {
+    const r = store.get('app.resume', null);
+    try { localStorage.removeItem('app.resume'); } catch { /* ignore */ }
+    if (!r || !r.code || Date.now() - (r.at || 0) > 3 * 60 * 1000) return false;
+    log(`resuming ${r.role} session ${r.code} after update`);
+    if (r.role === 'join') {
+      show('step-join');
+      $('join-code').value = r.code;
+      joinFriend(r.code, { rejoinUntil: Date.now() + 120000, friend: r.friend });
+      return true;
+    }
+    if (r.role === 'share') {
+      let res = null;
+      try { res = await bridge.listSources(); } catch { /* ignore */ }
+      const list = (res && res.sources) || [];
+      const want = r.source || {};
+      const src = list.find((x) => x.id === want.id)
+        || list.find((x) => x.kind === want.kind && x.name === want.name)
+        || (want.kind === 'screen' ? list.find((x) => x.kind === 'screen') : null);
+      if (!src) {
+        log('could not find the shared window after the update');
+        show('step-pick');
+        loadSources();
+        return true;
+      }
+      await startSharing(src, { code: r.code });
+      setStatus($('share-status'), `Updated. Waiting for ${r.friend || 'your friend'} to reconnect…`, 'busy');
+      return true;
+    }
+    return false;
+  }
 
   // boot
   (async () => {
@@ -1494,6 +1591,7 @@
     $('version').textContent = `${NAME} v${S.info.version}`;
     log(`started v${S.info.version} on ${S.info.platform}/${S.info.arch}`);
     show(S.name ? 'step-role' : 'step-name');
+    if (S.name && await resumeSession()) return;
     if (S.name) setTimeout(() => { if (!$('step-join').hidden || !S.maybeWelcome) return; S.maybeWelcome(); }, 600);
     if (!S.name) $('name').focus();
   })();

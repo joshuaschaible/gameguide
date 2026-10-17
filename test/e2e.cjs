@@ -183,6 +183,32 @@ const stub = (name) => `
   console.log('--- friend details ---\n' + (await friend.textContent('#details-text')).split('\n').slice(0, 30).join('\n'));
   await friend.click('#details-close');
 
+  // --- update while in a session: player restarts, friend rejoins by itself ---
+  const codeBefore = await player.textContent('#code');
+  await player.evaluate(() => {
+    // what the app does on "Update now" -> restart stage
+    const S = window.__app;
+    localStorage.setItem('app.resume', JSON.stringify({ role: 'share', code: S.code, source: S.source, friend: S.friend, at: Date.now() }));
+    S.conn.send({ t: 'updating' });
+  });
+  await player.waitForTimeout(500);
+  await player.reload();                      // the "restart" into the new version
+  await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0 && window.__app.log.some((l) => /video stream received/.test(l)) && window.__app.awaitReturn === null, null, { timeout: 60000 });
+  await friend.waitForTimeout(1500);
+  console.log('player update: code kept', codeBefore, '->', await player.textContent('#code'), '| friend:', await friend.textContent('#watch-status'));
+  console.log('friend rejoin log:', JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /updating|rejoin|restarting/.test(l)).slice(-4))));
+  // --- friend updates: friend restarts and rejoins by itself ---
+  await friend.evaluate(() => {
+    const S = window.__app;
+    localStorage.setItem('app.resume', JSON.stringify({ role: 'join', code: S.code, friend: S.friend, at: Date.now() }));
+    S.conn.send({ t: 'updating' });
+  });
+  await friend.waitForTimeout(300);
+  await friend.reload();
+  await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0, null, { timeout: 60000 });
+  await friend.waitForTimeout(1500);
+  console.log('friend update: rejoined ->', await friend.textContent('#watch-status'), '| player:', await player.textContent('#share-status'));
+
   // player ends -> friend sees ended
   await player.click('#end');
   await friend.waitForFunction(() => /ended the session/.test(document.getElementById('join-status').textContent), null, { timeout: 15000 });
