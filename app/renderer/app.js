@@ -1136,6 +1136,11 @@
   }
 
   // ---------- drawing on the friend's side ----------
+  // How long this person's marks stay up, in seconds (Settings, 1-10, default 3).
+  function markSeconds() {
+    const v = Number(store.get('app.markSeconds', 3));
+    return v >= 1 && v <= 10 ? Math.round(v) : 3;
+  }
   const drawState = { tool: 'pen', color: store.get('app.color', '#ff3b6b'), active: null, seq: 0 };
   const video = $('video');
   const canvas = $('draw');
@@ -1183,7 +1188,7 @@
     }
     canvas.setPointerCapture(ev.pointerId);
     drawState.active = `s${Date.now().toString(36)}${(drawState.seq++).toString(36)}`;
-    send({ t: 'start', id: drawState.active, x: r4(p.x), y: r4(p.y), c: drawState.color });
+    send({ t: 'start', id: drawState.active, x: r4(p.x), y: r4(p.y), c: drawState.color, h: markSeconds() });
   });
   canvas.addEventListener('pointermove', (ev) => {
     if (!drawState.active) return;
@@ -1302,7 +1307,7 @@
       const a = (i / 40) * Math.PI * 2;
       pts.push([0.5 + Math.cos(a) * 0.16 * aspect, 0.5 + Math.sin(a) * 0.16]);
     }
-    bridge.draw({ t: 'start', id, x: pts[0][0], y: pts[0][1], c: color });
+    bridge.draw({ t: 'start', id, x: pts[0][0], y: pts[0][1], c: color, h: markSeconds() });
     pts.slice(1).forEach((p, i) => setTimeout(() => bridge.draw({ t: 'move', id, x: p[0], y: p[1] }), 12 * (i + 1)));
     setTimeout(() => {
       bridge.draw({ t: 'end', id });
@@ -1424,11 +1429,14 @@
     $('relay-only').checked = !!store.get('app.relayOnly', false);
     $('settings-name').value = S.name;
     $('settings-update').textContent = '';
+    $('mark-seconds').value = String(markSeconds());
+    $('mark-seconds-value').textContent = `${markSeconds()} s`;
     S.pendingAvatar = S.avatar;
     window.Profile.picker($('avatar-picker-settings'), () => S.pendingAvatar, (a) => { S.pendingAvatar = a; });
     $('settings').showModal();
   });
   $('settings-cancel').addEventListener('click', () => $('settings').close());
+  $('mark-seconds').addEventListener('input', () => { $('mark-seconds-value').textContent = `${$('mark-seconds').value} s`; });
   $('settings-save').addEventListener('click', () => {
     const url = $('turn-url').value.trim();
     store.set('app.turn', url ? { url, user: $('turn-user').value.trim(), pass: $('turn-pass').value } : null);
@@ -1436,6 +1444,7 @@
     const n = $('settings-name').value.trim().slice(0, 24);
     if (n) { S.name = n; store.set('app.name', n); $('name').value = n; }
     if (S.pendingAvatar) { S.avatar = S.pendingAvatar; store.set('app.avatar', S.avatar); }
+    store.set('app.markSeconds', Number($('mark-seconds').value) || 3);
     renderChips();
     if (S.conn && S.conn.open) S.conn.send(myProfileMsg());
     $('settings').close();

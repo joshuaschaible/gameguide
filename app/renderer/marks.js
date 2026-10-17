@@ -6,7 +6,10 @@
 // Renders only while there is something to show; when idle it stops its
 // animation loop entirely so it costs nothing (important over a running game).
 (function () {
-  const HOLD_MS = 4000;  // marks stay fully visible this long after drawing stops
+  const HOLD_MS = 3000;  // default: marks stay fully visible this long after drawing stops
+  // The person drawing picks how long their marks stay (1-10 s); it rides in the
+  // stroke's start message as `h` so both screens fade it at the same time.
+  const holdFor = (h) => (typeof h === 'number' && h >= 1 && h <= 10 ? h * 1000 : HOLD_MS);
   const FADE_MS = 700;   // then fade out over this long
   const PING_MS = 1600;
 
@@ -40,7 +43,7 @@
       switch (msg.t) {
         case 'start':
           if (!ok(msg.x) || !ok(msg.y)) return;
-          this.strokes.set(msg.id, { pts: [[msg.x, msg.y]], c: safeColor(msg.c), last: now, done: false });
+          this.strokes.set(msg.id, { pts: [[msg.x, msg.y]], c: safeColor(msg.c), last: now, done: false, hold: holdFor(msg.h) });
           break;
         case 'move': {
           const s = this.strokes.get(msg.id);
@@ -87,7 +90,7 @@
 
       // prune expired marks first
       for (const [id, s] of this.strokes) {
-        if (now - s.last >= HOLD_MS + FADE_MS) this.strokes.delete(id);
+        if (now - s.last >= s.hold + FADE_MS) this.strokes.delete(id);
       }
       this.pings = this.pings.filter((p) => now - p.at < PING_MS);
 
@@ -106,7 +109,7 @@
         for (const s of this.strokes.values()) {
           const age = now - s.last;
           // Unfinished strokes that go silent (lost "end") still fade.
-          ctx.globalAlpha = age < HOLD_MS ? 1 : Math.max(0, 1 - (age - HOLD_MS) / FADE_MS);
+          ctx.globalAlpha = age < s.hold ? 1 : Math.max(0, 1 - (age - s.hold) / FADE_MS);
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
           // dark outline so marks read on bright and dark game scenes

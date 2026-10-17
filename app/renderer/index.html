@@ -154,7 +154,7 @@
       <p class="hotkeys-title">In-game hotkeys</p>
       <p><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> clear marks · <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> hide/show marks · <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> sound on/off</p>
     </div>
-    <p class="note small-note">Keep <span data-brand></span> open while you play. Drawings appear over fullscreen games and fade after 4 seconds; your mouse and keyboard still go to the game. If a game hides the drawings, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b> in its video settings. You'll still hear the sound cue either way.</p>
+    <p class="note small-note">Keep <span data-brand></span> open while you play. Drawings appear over fullscreen games and fade after a few seconds; your mouse and keyboard still go to the game. If a game hides the drawings, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b> in its video settings. You'll still hear the sound cue either way.</p>
   </section>
 
   <!-- 3c. join -->
@@ -224,7 +224,7 @@
   <div class="slide" data-slide="2" hidden>
     <div class="slide-icon">✏️</div>
     <h2>Draw on their game</h2>
-    <p>Use <b>Pen</b> to draw and <b>Pointer</b> to ping a spot. Your marks show up on top of their game and fade after 4 seconds.</p>
+    <p>Use <b>Pen</b> to draw and <b>Pointer</b> to ping a spot. Your marks show up on top of their game and fade after a few seconds (change how long in Settings).</p>
     <p>Sharing? Click <b>Test drawing</b> to see what your friend's marks will look like.</p>
   </div>
   <div class="welcome-foot">
@@ -261,6 +261,16 @@
   <label>Gamer tag <input id="settings-name" type="text" maxlength="24"></label>
   <p class="note pick-label">Avatar</p>
   <div id="avatar-picker-settings"></div>
+
+  <div class="set-section">
+    <p class="set-title">Drawing</p>
+    <div class="set-row">
+      <label class="slider-label" for="mark-seconds">How long your marks stay on screen</label>
+      <span id="mark-seconds-value" class="slider-value">3 s</span>
+    </div>
+    <input id="mark-seconds" type="range" min="1" max="10" step="1" value="3">
+    <p class="note set-status">Applies to marks you draw, on both screens.</p>
+  </div>
 
   <div class="set-section">
     <p class="set-title">Updates</p>

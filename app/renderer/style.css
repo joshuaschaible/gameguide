@@ -205,3 +205,8 @@ dialog { max-height: 90vh; overflow: auto; }
 .avatar-option.photo.active { border-style: solid; border-color: var(--accent); }
 .avatar-picker input[type=file] { display: none; }
 .pick-label { margin: 18px 0 0; }
+
+.slider-label { margin: 0; flex-direction: row; color: var(--muted); font-size: 13px; }
+dialog label.slider-label { display: inline; margin: 0; }
+.slider-value { font-weight: 600; font-size: 13px; min-width: 32px; text-align: right; }
+#mark-seconds { width: 100%; margin-top: 8px; accent-color: var(--accent); }

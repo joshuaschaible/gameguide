@@ -106,6 +106,25 @@ const stub = (name) => `
   await friend.click('.tool[data-tool=ping]');
   await friend.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
   await friend.waitForTimeout(800);
+  // mark duration: friend sets 7 s, draws; the player's overlay receives h:7
+  await friend.evaluate(() => localStorage.setItem('app.markSeconds', '7'));
+  await friend.click('.tool[data-tool=pen]');
+  await friend.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
+  await friend.mouse.down(); await friend.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.25); await friend.mouse.up();
+  await friend.waitForTimeout(400);
+  console.log('mark duration sent:', JSON.stringify(await player.evaluate(() => window.__drawn.filter((m) => m.t === 'start').map((m) => m.h))));
+  // fade timing in the renderer: h=1 -> gone after ~1.7 s, default -> still there
+  console.log('fade timing:', JSON.stringify(await friend.evaluate(async () => {
+    const c = document.createElement('canvas'); c.style.cssText = 'width:200px;height:100px'; document.body.appendChild(c);
+    const m = new window.Marks(c);
+    m.apply({ t: 'start', id: 'a', x: 0.1, y: 0.1, c: '#ff0000', h: 1 }); m.apply({ t: 'end', id: 'a' });
+    m.apply({ t: 'start', id: 'b', x: 0.5, y: 0.5, c: '#00ff00' }); m.apply({ t: 'end', id: 'b' });
+    await new Promise((r) => setTimeout(r, 2000));
+    const left = [...m.strokes.keys()];
+    c.remove();
+    return { leftAfter2s: left };
+  })));
+  await friend.evaluate(() => localStorage.removeItem('app.markSeconds'));
   console.log('receipt after mark:', JSON.stringify(await friend.evaluate(() => [document.getElementById('receipt').hidden, document.getElementById('receipt').textContent])));
   await player.evaluate(() => { window.__rcState = 'hidden'; });
   await friend.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.6);
