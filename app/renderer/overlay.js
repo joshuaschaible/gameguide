@@ -22,26 +22,39 @@
   // is covering the overlay. Toggle with Ctrl/Cmd+Shift+M or in the app.
   const soundOn = () => { try { return localStorage.getItem('app.sound') !== 'false'; } catch { return true; } };
   let ctx = null;
-  let lastBeep = 0;
+  // Each kind has its own minimum gap: a pen stroke beeps once, but every
+  // reaction in a quick burst gets its own short pop.
+  const MIN_GAP = { pen: 700, ping: 250, react: 60 };
+  const lastBeep = {};
+  let voices = 0;
   function beep(kind) {
     if (!soundOn()) return;
     const now = performance.now();
-    if (now - lastBeep < 700) return;
-    lastBeep = now;
+    if (now - (lastBeep[kind] || 0) < (MIN_GAP[kind] || 700)) return;
+    if (voices >= 6) return; // never stack into a wall of noise
+    lastBeep[kind] = now;
     try {
       ctx = ctx || new AudioContext();
+      if (ctx.state === 'suspended') ctx.resume();
+      const t = ctx.currentTime;
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = 'sine';
-      const f0 = kind === 'ping' ? 880 : kind === 'react' ? 1040 : 660;
-      o.frequency.setValueAtTime(f0, ctx.currentTime);
-      o.frequency.exponentialRampToValueAtTime(f0 * 1.5, ctx.currentTime + 0.08);
-      g.gain.setValueAtTime(0.0001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
+      const react = kind === 'react';
+      // Reactions: short, quieter pop with a little random pitch so a burst
+      // sounds lively instead of like one repeated tone.
+      const f0 = kind === 'ping' ? 880 : react ? 900 + Math.random() * 400 : 660;
+      const len = react ? 0.1 : 0.16;
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(f0 * 1.5, t + len * 0.5);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(react ? 0.12 : 0.18, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + len);
       o.connect(g).connect(ctx.destination);
-      o.start();
-      o.stop(ctx.currentTime + 0.18);
+      voices++;
+      o.onended = () => { voices = Math.max(0, voices - 1); };
+      o.start(t);
+      o.stop(t + len + 0.02);
     } catch { /* ignore */ }
   }
 

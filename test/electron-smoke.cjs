@@ -61,6 +61,10 @@ const path = require('path');
       await win.evaluate(() => { ['🔥', '😂', '🎉'].forEach((e, i) => setTimeout(() => window.bridge.draw({ t: 'react', e, x: 0.75 + i * 0.07 }), i * 250)); window.bridge.draw({ t: 'react', e: '<script>', x: 0.5 }); });
       await ov.waitForTimeout(900);
       await ov.screenshot({ path: '/tmp/claude-0/overlay-react.png' });
+      await ov.evaluate(() => { window.__osc = 0; const orig = AudioContext.prototype.createOscillator; AudioContext.prototype.createOscillator = function () { window.__osc++; return orig.call(this); }; });
+      await win.evaluate(() => { for (let i = 0; i < 5; i++) setTimeout(() => window.bridge.draw({ t: 'react', e: '👍', x: 0.8 }), i * 120); });
+      await ov.waitForTimeout(1000);
+      console.log('reaction sounds for 5 quick reactions:', await ov.evaluate(() => window.__osc));
       console.log('placement log:', JSON.stringify(await win.evaluate(() => window.__app.log.filter((l) => /overlay: game area/.test(l)).slice(-1))));
       // simulate macOS pushing the layer 24 px down: canvas must shift back up
       await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().find((x) => x.getTitle() === 'Game Guide overlay'); w.webContents.send('overlay:frame', { fit: true, dx: 0, dy: 24, w: 800, h: 600 }); });
