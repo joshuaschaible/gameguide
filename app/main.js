@@ -505,13 +505,13 @@ app.whenReady().then(() => {
   ipcMain.handle('overlay:close', () => { closeOverlay(); return true; });
   ipcMain.on('overlay:draw', (_e, msg) => {
     if (!overlayWin || overlayWin.isDestroyed()) return;
-    const isNew = msg && (msg.t === 'start' || msg.t === 'ping');
+    const isNew = msg && (msg.t === 'start' || msg.t === 'ping' || msg.t === 'react');
     if (isNew && !overlayActive) {
       overlayActive = true; // show right away; the overlay confirms/denies shortly
       track();
     }
     overlayWin.webContents.send('overlay:draw', msg);
-    if (isNew && mainWin && !mainWin.isDestroyed()) {
+    if (isNew && msg.t !== 'react' && mainWin && !mainWin.isDestroyed()) {
       // Receipt for the friend: did this mark actually make it onto the screen?
       let state = 'shown';
       if (overlayHidden) state = 'hidden';

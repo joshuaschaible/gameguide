@@ -33,8 +33,9 @@
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = 'sine';
-      o.frequency.setValueAtTime(kind === 'ping' ? 880 : 660, ctx.currentTime);
-      o.frequency.exponentialRampToValueAtTime(kind === 'ping' ? 1320 : 990, ctx.currentTime + 0.08);
+      const f0 = kind === 'ping' ? 880 : kind === 'react' ? 1040 : 660;
+      o.frequency.setValueAtTime(f0, ctx.currentTime);
+      o.frequency.exponentialRampToValueAtTime(f0 * 1.5, ctx.currentTime + 0.08);
       g.gain.setValueAtTime(0.0001, ctx.currentTime);
       g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
@@ -61,6 +62,7 @@
     marks.apply(msg);
     if (msg && msg.t === 'start') beep('pen');
     if (msg && msg.t === 'ping') beep('ping');
+    if (msg && msg.t === 'react') beep('react');
     if (msg && msg.t === 'clear' && msg.local) showToast('Marks cleared');
     report();
   });

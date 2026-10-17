@@ -58,6 +58,9 @@ const path = require('path');
       await win.evaluate(() => { window.bridge.draw({ t: 'start', id: 'a', x: 0.1, y: 0.1, c: '#ff0000' }); window.bridge.draw({ t: 'move', id: 'a', x: 0.9, y: 0.9 }); window.bridge.draw({ t: 'end', id: 'a' }); });
       await ov.waitForTimeout(300);
       console.log('overlay visible with a mark:', await vis());
+      await win.evaluate(() => { ['🔥', '😂', '🎉'].forEach((e, i) => setTimeout(() => window.bridge.draw({ t: 'react', e, x: 0.75 + i * 0.07 }), i * 250)); window.bridge.draw({ t: 'react', e: '<script>', x: 0.5 }); });
+      await ov.waitForTimeout(900);
+      await ov.screenshot({ path: '/tmp/claude-0/overlay-react.png' });
       console.log('placement log:', JSON.stringify(await win.evaluate(() => window.__app.log.filter((l) => /overlay: game area/.test(l)).slice(-1))));
       // simulate macOS pushing the layer 24 px down: canvas must shift back up
       await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().find((x) => x.getTitle() === 'Game Guide overlay'); w.webContents.send('overlay:frame', { fit: true, dx: 0, dy: 24, w: 800, h: 600 }); });

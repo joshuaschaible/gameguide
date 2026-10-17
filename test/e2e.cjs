@@ -190,6 +190,21 @@ const stub = (name) => `
   await friend.waitForTimeout(5000);
   console.log('after refresh button (player log tail):', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /rebuild|refresh|friend reports/.test(l)).slice(-2))));
   console.log('friend after refresh:', await friend.textContent('#watch-status'));
+  // ---- emoji reactions ----
+  await friend.click('#react-btn');
+  console.log('react menu open:', await friend.evaluate(() => !document.getElementById('react-menu').hidden), 'items', await friend.locator('#react-menu button').count());
+  await friend.click('#react-menu button:nth-child(4)');
+  await friend.waitForTimeout(250);
+  await friend.screenshot({ path: '/tmp/claude-0/react-friend.png' });
+  await friend.keyboard.press('Escape');
+  await friend.locator('#video').click({ position: { x: 5, y: 5 }, trial: true }).catch(() => {});
+  await friend.keyboard.press('2');
+  await friend.waitForTimeout(600);
+  const reacts = await player.evaluate(() => window.__drawn.filter((m) => m.t === 'react').map((m) => `${m.e}@${m.x}`));
+  console.log('player got reactions:', JSON.stringify(reacts), '| menu closed after Esc:', await friend.evaluate(() => document.getElementById('react-menu').hidden));
+  for (let i = 0; i < 10; i++) await friend.keyboard.press('1');
+  await friend.waitForTimeout(500);
+  console.log('flood limit (10 presses):', await player.evaluate(() => window.__drawn.filter((m) => m.t === 'react' && m.e === '👍').length));
   // ---- profile changes during a session reach the other side ----
   const peerAv = (pg) => pg.evaluate(() => window.__app.peerProfile && window.__app.peerProfile.avatar && (window.__app.peerProfile.avatar.value || window.__app.peerProfile.avatar.kind));
   // friend changes avatar in Settings and saves

@@ -3,6 +3,7 @@
 // Messages use normalized coordinates (0..1) relative to the shared source.
 //   {t:'start', id, x, y, c}  {t:'move', id, x, y}  {t:'end', id}
 //   {t:'ping', x, y, c}       {t:'clear'}
+//   {t:'react', e, x}         emoji reaction floating up from (x, near bottom)
 // Renders only while there is something to show; when idle it stops its
 // animation loop entirely so it costs nothing (important over a running game).
 (function () {
@@ -12,6 +13,9 @@
   const holdFor = (h) => (typeof h === 'number' && h >= 1 && h <= 10 ? h * 1000 : HOLD_MS);
   const FADE_MS = 700;   // then fade out over this long
   const PING_MS = 1600;
+  const REACT_MS = 2600;
+  // Only these can be shown (nothing else ever gets drawn on the player's screen).
+  const REACTIONS = ['👍', '😂', '😮', '🔥', '❤️', '👀', '💀', '🎉'];
 
   class Marks {
     // rectFn() returns the area (CSS px, relative to the canvas) that maps to 0..1.
@@ -23,11 +27,12 @@
       this.opts = opts || {};
       this.strokes = new Map();
       this.pings = [];
+      this.reactions = [];
       this.running = false;
       this._loop = this._loop.bind(this);
     }
 
-    get active() { return this.strokes.size > 0 || this.pings.length > 0; }
+    get active() { return this.strokes.size > 0 || this.pings.length > 0 || this.reactions.length > 0; }
 
     _wake() {
       if (this.running) return;
@@ -61,6 +66,13 @@
           if (!ok(msg.x) || !ok(msg.y)) return;
           this.pings.push({ x: msg.x, y: msg.y, c: safeColor(msg.c), at: now });
           break;
+        case 'react': {
+          if (!REACTIONS.includes(msg.e)) return;
+          const x = typeof msg.x === 'number' ? Math.min(0.95, Math.max(0.05, msg.x)) : 0.82;
+          if (this.reactions.length > 40) this.reactions.shift();
+          this.reactions.push({ e: msg.e, x, at: now, sway: Math.random() * Math.PI * 2 });
+          break;
+        }
         case 'clear':
           this.strokes.clear();
           this.pings = [];
@@ -93,6 +105,7 @@
         if (now - s.last >= s.hold + FADE_MS) this.strokes.delete(id);
       }
       this.pings = this.pings.filter((p) => now - p.at < PING_MS);
+      this.reactions = this.reactions.filter((q) => now - q.at < REACT_MS);
 
       if (!this.active) {
         // Nothing left: canvas is cleared, stop looping until the next mark.
@@ -146,6 +159,24 @@
           ctx.arc(x, y, base * 0.45, 0, Math.PI * 2);
           ctx.fill();
         }
+
+        // Reactions: pop in near the bottom, float up with a little sway, fade out.
+        const size = Math.max(34, Math.min(r.w, r.h) * 0.075);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const q of this.reactions) {
+          const k = (now - q.at) / REACT_MS;
+          const rise = 1 - Math.pow(1 - k, 2); // ease-out
+          const x = r.x + (q.x + Math.sin(q.sway + k * 5) * 0.012) * r.w;
+          const y = r.y + (0.9 - rise * 0.45) * r.h;
+          const pop = k < 0.08 ? 0.6 + (k / 0.08) * 0.5 : k < 0.14 ? 1.1 - ((k - 0.08) / 0.06) * 0.1 : 1;
+          ctx.globalAlpha = k < 0.06 ? k / 0.06 : k > 0.6 ? Math.max(0, 1 - (k - 0.6) / 0.4) : 1;
+          ctx.font = `${Math.round(size * pop)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+          ctx.shadowColor = 'rgba(0,0,0,0.35)';
+          ctx.shadowBlur = 8;
+          ctx.fillText(q.e, x, y);
+          ctx.shadowBlur = 0;
+        }
         ctx.globalAlpha = 1;
       }
       requestAnimationFrame(this._loop);
@@ -165,4 +196,5 @@
   }
 
   window.Marks = Marks;
+  window.Marks.REACTIONS = REACTIONS;
 })();

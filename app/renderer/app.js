@@ -912,7 +912,7 @@
       log(`no drawing path inside the video connection (${e && e.message})`);
     }
   }
-  const DRAW_TYPES = ['start', 'move', 'end', 'ping', 'clear'];
+  const DRAW_TYPES = ['start', 'move', 'end', 'ping', 'clear', 'react'];
 
   // Viewer: number each mark message and send it on every open path.
   function sendDrawMsg(msg) {
@@ -1576,12 +1576,46 @@
     $('freeze').textContent = 'Refreshing video…';
     $('freeze').hidden = false;
   });
+  // ---------- reactions ----------
+  // Emoji that float up and fade on the player's screen (and on ours).
+  const REACTIONS = window.Marks.REACTIONS;
+  let reactTimes = [];
+  function sendReaction(e) {
+    const now = Date.now();
+    reactTimes = reactTimes.filter((t) => now - t < 1000);
+    if (reactTimes.length >= 6) return; // keep it fun, not a flood
+    reactTimes.push(now);
+    send({ t: 'react', e, x: r4(0.72 + Math.random() * 0.2) });
+  }
+  REACTIONS.forEach((e, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'menuitem');
+    b.title = `Send ${e} (key ${i + 1})`;
+    b.textContent = e;
+    const k = document.createElement('small');
+    k.textContent = String(i + 1);
+    b.appendChild(k);
+    b.addEventListener('click', () => sendReaction(e));
+    $('react-menu').appendChild(b);
+  });
+  const setReactMenu = (open) => {
+    $('react-menu').hidden = !open;
+    $('react-btn').setAttribute('aria-expanded', String(open));
+    $('react-btn').classList.toggle('active', open);
+  };
+  $('react-btn').addEventListener('click', (ev) => { ev.stopPropagation(); setReactMenu($('react-menu').hidden); });
+  document.addEventListener('click', (ev) => { if (!$('react-menu').hidden && !ev.target.closest('.react-wrap')) setReactMenu(false); });
+
   document.addEventListener('keydown', (ev) => {
     if ($('step-watch').hidden || ev.target.tagName === 'INPUT') return;
     const k = ev.key.toLowerCase();
     if (k === 'p') setTool('pen');
     if (k === 'o') setTool('ping');
     if (k === 'c') send({ t: 'clear' });
+    if (k === 'escape') setReactMenu(false);
+    const n = Number(ev.key);
+    if (n >= 1 && n <= REACTIONS.length && !ev.ctrlKey && !ev.metaKey && !ev.altKey) sendReaction(REACTIONS[n - 1]);
   });
 
   // =====================================================================
