@@ -74,6 +74,7 @@ const stub = (name) => `
   await player.click('.source');
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code = await player.textContent('#code');
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-waiting.png' });
   console.log('code', code);
   await player.click('#copy-code');
   console.log('copied', await player.evaluate(() => window.__copied));
@@ -109,6 +110,10 @@ const stub = (name) => `
   console.log('signal level (friend, player):', await friend.evaluate(() => window.__app.sigLevel), await player.evaluate(() => window.__app.sigLevel));
   await friend.keyboard.press('Escape');
   await player.screenshot({ path: '/tmp/claude-0/ui-share.png' });
+  await player.click('.stream-settings > summary');
+  await player.waitForTimeout(200);
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png', fullPage: true });
+  await player.click('.stream-settings > summary');
 
   // draw a stroke + ping + clear
   const box = await friend.locator('#draw').boundingBox();
@@ -155,6 +160,7 @@ const stub = (name) => `
   console.log('watch status:', await friend.textContent('#watch-status'), 'friend=', await friend.evaluate(() => window.__app.friend), 'log hello?', await friend.evaluate(() => window.__app.log.filter((l) => /hello|said/.test(l)).join(' | ')));
   console.log('player stats:', await player.textContent('#q-stats'), '|', await player.textContent('#q-hint'));
   // live change: 720p / 30fps / vp9 setting
+  await player.evaluate(() => { document.querySelector('.stream-settings').open = true; document.querySelector('.more-quality').open = true; });
   await player.selectOption('#q-res', '720');
   await player.selectOption('#q-fps', '30');
   await player.waitForTimeout(4500);

@@ -261,3 +261,49 @@ dialog::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { border-color: va
 .sig-good svg rect { fill: var(--good); }
 .sig-ok svg .b1, .sig-ok svg .b2 { fill: var(--warn); }
 .sig-poor svg .b1 { fill: var(--bad); }
+
+/* ---------- sharing screen: waiting / live ---------- */
+.share { width: min(620px, 92vw); }
+.share-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: var(--muted); font-size: 14px; }
+.share-top .source-name { color: var(--text); max-width: none; font-weight: 600; }
+.live-pill { display: none; font-size: 11px; font-weight: 800; letter-spacing: 1px; color: #fff; background: var(--bad); border-radius: 6px; padding: 2px 7px; }
+.share.live .live-pill { display: inline-block; animation: pulse 1.2s infinite alternate; }
+
+/* waiting: one big action */
+.share.waiting h1 { font-size: 40px; margin-bottom: 26px; }
+.invite { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+.hero-btn { font-size: 20px; padding: 18px 34px; border-radius: 14px; box-shadow: 0 10px 30px rgba(124,92,255,.35); }
+.code-line { margin: 0; color: var(--muted); font-size: 15px; display: flex; align-items: baseline; gap: 10px; }
+.code-line .code { flex: none; font-size: 20px; letter-spacing: 4px; color: var(--text); }
+
+/* live: compact card, invite shrinks to one line */
+.live-card { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+.share.live .live-card { display: block; }
+.share.live h1 { display: none; }
+.live-who { display: flex; align-items: center; gap: 14px; }
+.live-name { font-size: 20px; font-weight: 700; }
+.live-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.live-actions { display: flex; gap: 10px; margin-top: 16px; }
+.share.waiting .live-card { display: none; }
+.share.live .invite { flex-direction: row; align-items: baseline; gap: 14px; margin-top: 14px; }
+.share.live .hero-btn { font-size: 13px; padding: 0; background: none; box-shadow: none; color: var(--muted); text-decoration: underline; font-weight: 400; order: 2; }
+.share.live .hero-btn:hover { color: var(--text); background: none; }
+.share.live .code-line { font-size: 13px; }
+.share.live .code-line .code { font-size: 14px; letter-spacing: 2px; color: var(--muted); }
+.share .status { margin-top: 14px; }
+
+/* everything else, tucked away */
+.stream-settings { margin-top: 26px; border-top: 1px solid var(--line); padding-top: 14px; }
+.stream-settings > summary { cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
+.stream-settings > summary::-webkit-details-marker { display: none; }
+.stream-settings > summary::before { content: "▸"; transition: transform .15s; }
+.stream-settings[open] > summary::before { transform: rotate(90deg); }
+.stream-settings > summary:hover { color: var(--text); }
+.set-block { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.set-block .check-row { margin: 0; }
+.set-block .note { margin: 0 0 10px; }
+.set-block.hotkeys { margin-top: 14px; }
+.share.live .status.good { display: none; }
+.hotkey-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.hotkey-list li { display: flex; align-items: center; gap: 12px; }
+.hotkey-list li span { min-width: 170px; }

@@ -119,29 +119,38 @@
   </section>
 
   <!-- 3b. sharing -->
-  <section id="step-share" class="step" hidden>
-    <p class="eyebrow">Sharing your screen</p>
-    <h1 id="share-title">Send this code to your friend</h1>
-    <div class="source-row">
+  <section id="step-share" class="step share waiting" hidden>
+    <div class="share-top">
+      <span class="live-pill">LIVE</span>
       <span id="source-name" class="source-name"></span>
-      <button id="change-source" class="ghost small">Change source</button>
-      <button id="restart-stream" class="ghost small" title="Fresh capture + fresh video connection. Your friend stays connected.">🔄 Restart stream</button>
+      <button id="change-source" class="link">Change</button>
     </div>
+    <h1 id="share-title">Invite your friend</h1>
     <p id="track-note" class="note track-note"></p>
-    <div class="code-box">
-      <div id="code" class="code">······</div>
-      <div class="code-actions">
-        <button id="copy-invite" class="primary" title="Copies a message with a link. Paste it in Discord, a text, anywhere.">Copy invite link</button>
-        <button id="copy-code" class="ghost small">Copy code only</button>
+
+    <!-- shown once a friend is watching -->
+    <div class="live-card">
+      <div id="live-who" class="live-who"></div>
+      <div class="live-actions">
+        <button id="return-game" class="primary">Return to game</button>
+        <button id="test-draw" class="ghost" title="Draws a sample mark on your screen so you can check it shows up on top of your game">✏️ Test drawing</button>
       </div>
     </div>
-    <p id="share-status" class="status">Starting…</p>
-    <div class="row gap">
-      <button id="return-game" class="ghost">Return to game</button>
-      <button id="test-draw" class="ghost" title="Draws a sample mark on your screen so you can check it shows up on top of your game">✏️ Test drawing</button>
+
+    <!-- before anyone joins this is the whole screen; once live it shrinks to one line -->
+    <div class="invite">
+      <button id="copy-invite" class="primary hero-btn" title="Copies a message with a link. Paste it in Discord, a text, anywhere.">Copy invite link</button>
+      <p class="code-line">Code <span id="code" class="code">······</span> <button id="copy-code" class="link">Copy code</button></p>
     </div>
-    <div class="quality">
-      <p class="hotkeys-title">Video quality <span class="note">(changes apply right away)</span></p>
+
+    <p id="share-status" class="status">Starting…</p>
+    <p id="overlay-hidden" class="warn-inline" hidden>Drawings are hidden. Press <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> to show them again.</p>
+    <p id="q-hint" class="warn-inline"></p>
+
+    <details class="stream-settings">
+      <summary>Stream settings</summary>
+      <div class="set-block">
+        <p class="set-title">Video quality <span class="note">(changes apply right away)</span></p>
       <div class="q-grid">
         <label>Resolution
           <select id="q-res">
@@ -191,15 +200,23 @@
         <p id="q-stats" class="q-stats"></p>
         <p id="q-pipe" class="q-stats q-pipe"></p>
       </details>
-      <p id="q-hint" class="warn-inline"></p>
-    </div>
-    <label class="check-row"><input id="sound" type="checkbox" checked> Play a sound when your friend draws</label>
-    <p id="overlay-hidden" class="warn-inline" hidden>Drawings are hidden. Press <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> to show them again.</p>
-    <div class="hotkeys">
-      <p class="hotkeys-title">In-game hotkeys</p>
-      <p><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> clear marks · <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> hide/show marks · <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> sound on/off</p>
-    </div>
-    <p class="note small-note">Keep <span data-brand></span> open while you play. Drawings appear over fullscreen games and fade after a few seconds; your mouse and keyboard still go to the game. If a game hides the drawings, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b> in its video settings. You'll still hear the sound cue either way.</p>
+      </div>
+      <div class="set-block">
+        <label class="check-row"><input id="sound" type="checkbox" checked> Play a sound when your friend draws</label>
+      </div>
+      <div class="set-block hotkeys">
+        <p class="hotkeys-title">In-game hotkeys</p>
+        <ul class="hotkey-list">
+          <li><span><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></span> Erase marks</li>
+          <li><span><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd></span> Hide / show marks</li>
+          <li><span><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd></span> Sound on / off</li>
+        </ul>
+      </div>
+      <div class="set-block">
+        <p class="note">Drawings appear over fullscreen games and fade after a few seconds; your mouse and keyboard still go to the game. If a game hides them, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b>. You'll still hear the sound cue either way.</p>
+        <button id="restart-stream" class="ghost small" title="Fresh capture + fresh video connection. Your friend stays connected.">🔄 Restart stream</button>
+      </div>
+    </details>
   </section>
 
   <!-- 3c. join -->

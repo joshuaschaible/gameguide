@@ -77,6 +77,7 @@
     if (S.name) people.push({ name: S.name, avatar: S.avatar, you: true, role: S.role === 'share' ? 'Streaming' : S.role === 'join' ? 'Watching' : '' });
     if (S.peerProfile) people.push({ name: S.peerProfile.name, avatar: S.peerProfile.avatar, you: false, role: S.role === 'share' ? 'Watching' : 'Streaming' });
     $('people').hidden = !people.length;
+    if (S.role === 'share') renderLiveCard();
     // In the stack you are always in front (leftmost, on top); others behind.
     people.forEach((p, i, arr) => {
       const av = window.Profile.render(p.avatar, p.name, 28);
@@ -115,6 +116,32 @@
       menu.appendChild(row);
     }
   }
+  // Sharing screen has two states: waiting (one big invite action) and live
+  // (compact card with who's watching).
+  function setShareLive(live) {
+    const el = $('step-share');
+    el.classList.toggle('live', !!live);
+    el.classList.toggle('waiting', !live);
+    renderLiveCard();
+  }
+  function renderLiveCard() {
+    const box = $('live-who');
+    if (!box) return;
+    box.innerHTML = '';
+    const name = (S.peerProfile && S.peerProfile.name) || S.friend || 'Your friend';
+    box.appendChild(window.Profile.render(S.peerProfile && S.peerProfile.avatar, name, 44));
+    const t = document.createElement('div');
+    const n = document.createElement('div');
+    n.className = 'live-name';
+    n.textContent = `${name} is watching`;
+    const sub = document.createElement('div');
+    sub.className = 'live-sub';
+    sub.textContent = 'They can draw and react on top of your game.';
+    t.appendChild(n);
+    t.appendChild(sub);
+    box.appendChild(t);
+  }
+
   // pv = profile version; changes whenever my name/avatar changes, so the
   // other side can tell (from heartbeats) that its copy is out of date.
   function myProfileMsg() { return { t: 'hello', name: S.name, avatar: S.avatar, pv: S.profileVer }; }
@@ -819,7 +846,7 @@
   }
 
   function showSourceName(source) {
-    $('source-name').textContent = source.kind === 'window' ? `Sharing: ${source.name}` : `Sharing: ${source.name}`;
+    $('source-name').textContent = `Sharing ${source.name}`;
   }
 
   async function startSharing(source, opts) {
@@ -830,7 +857,8 @@
     show('step-share');
     $('code').textContent = '······';
     $('copy-code').disabled = true; $('copy-invite').disabled = true;
-    $('share-title').textContent = 'Send this code to your friend';
+    $('share-title').textContent = 'Invite your friend';
+    setShareLive(false);
     setStatus($('share-status'), 'Starting capture…', 'busy');
     try {
       const c = await captureSource(source);
@@ -1168,6 +1196,7 @@
       S.netCapMbps = null;
       const call = startVideoCall(conn);
       $('share-title').textContent = `${viewerName} is watching`;
+      setShareLive(true);
       setStatus($('share-status'), `Connected. ${viewerName} can see your screen and draw on it.`, 'good');
       later(4000, async () => {
         const r = await describeRoute(call.peerConnection);
@@ -1265,7 +1294,8 @@
     $('q-stats').textContent = '';
     $('q-hint').textContent = '';
     if (S.ended) return;
-    $('share-title').textContent = 'Send this code to your friend';
+    $('share-title').textContent = 'Invite your friend';
+    setShareLive(false);
     if (S.peerUpdating) {
       setStatus($('share-status'), `${S.friend || 'Your friend'} is updating and will reconnect by themselves…`, 'busy');
       S.peerUpdating = false;
@@ -1888,7 +1918,7 @@
     if (!S.code) return;
     await bridge.copy(S.code);
     $('copy-code').textContent = 'Copied ✓';
-    setTimeout(() => { $('copy-code').textContent = 'Copy code only'; }, 1500);
+    setTimeout(() => { $('copy-code').textContent = 'Copy code'; }, 1500);
   });
   $('return-game').addEventListener('click', () => bridge.minimize());
   $('change-source').addEventListener('click', openSourceDialog);
