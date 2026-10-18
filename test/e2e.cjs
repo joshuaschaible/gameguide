@@ -122,10 +122,21 @@ const stub = (name) => `
   await player.waitForTimeout(400);
   console.log('preview back in front:', JSON.stringify(await pv()));
   await player.screenshot({ path: '/tmp/claude-0/ui-share-preview.png' });
-  await player.click('.stream-settings > summary');
+  await player.click('#stream-set-btn');
   await player.waitForTimeout(200);
-  await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png', fullPage: true });
-  await player.click('.stream-settings > summary');
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png' });
+  await player.keyboard.press('Escape');
+  await player.click('#invite-btn');
+  await player.waitForTimeout(200);
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-invite.png', clip: { x: 0, y: 0, width: 700, height: 260 } });
+  await player.keyboard.press('Escape');
+  await friend.click('#color-btn');
+  await friend.waitForTimeout(200);
+  await friend.screenshot({ path: '/tmp/claude-0/ui-colors.png', clip: { x: 0, y: 0, width: 600, height: 200 } });
+  await friend.click('#color-menu .swatch[data-color="#3bf0ff"]');
+  console.log('color pick:', await friend.evaluate(() => [window.__app && document.getElementById('color-menu').classList.contains('open'), getComputedStyle(document.getElementById('color-current')).backgroundColor]));
+  await friend.click('#color-btn');
+  await friend.click('#color-menu .swatch[data-color="#ff3b6b"]');
 
   // draw a stroke + ping + clear
   const box = await friend.locator('#draw').boundingBox();
@@ -172,7 +183,7 @@ const stub = (name) => `
   console.log('watch status:', await friend.textContent('#watch-status'), 'friend=', await friend.evaluate(() => window.__app.friend), 'log hello?', await friend.evaluate(() => window.__app.log.filter((l) => /hello|said/.test(l)).join(' | ')));
   console.log('player stats:', await player.textContent('#q-stats'), '|', await player.textContent('#q-hint'));
   // live change: 720p / 30fps / vp9 setting
-  await player.evaluate(() => { document.querySelector('.stream-settings').open = true; document.querySelector('.more-quality').open = true; });
+  await player.evaluate(() => { document.getElementById('stream-set-menu').classList.add('open'); document.querySelector('.more-quality').open = true; });
   await player.selectOption('#q-res', '720');
   await player.selectOption('#q-fps', '30');
   await player.waitForTimeout(4500);
@@ -325,6 +336,7 @@ const stub = (name) => `
     '| mark arrived:', (await starts()) > before,
     '| friend still watching:', await friend.evaluate(() => !document.getElementById('step-watch').hidden));
   await player.waitForTimeout(3000);
+  await player.click('#stream-set-btn');
   await player.click('#restart-stream');
   await player.waitForTimeout(5000);
   console.log('player restart-stream:', await player.textContent('#share-status'), '| friend:', await friend.textContent('#watch-status'));

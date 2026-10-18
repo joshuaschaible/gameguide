@@ -15,23 +15,47 @@
       <button class="tool active" data-tool="pen" title="Pen (P)">✏️ Pen</button>
       <button class="tool" data-tool="ping" title="Pointer (O)">📍 Pointer</button>
       <span class="sep"></span>
-      <div class="swatches" role="group" aria-label="Color">
-        <button class="swatch active" data-color="#ff3b6b" title="Red"></button>
-        <button class="swatch" data-color="#ff8a00" title="Orange"></button>
-        <button class="swatch" data-color="#ffd23f" title="Yellow"></button>
-        <button class="swatch" data-color="#7dff5a" title="Green"></button>
-        <button class="swatch" data-color="#3bf0ff" title="Cyan"></button>
-        <button class="swatch" data-color="#3d7bff" title="Blue"></button>
-        <button class="swatch" data-color="#b26bff" title="Purple"></button>
-        <button class="swatch" data-color="#ff4fd8" title="Pink"></button>
-        <button class="swatch" data-color="#ffffff" title="White"></button>
-        <button class="swatch" data-color="#111111" title="Black"></button>
+      <div id="color-wrap" class="pop-wrap color-wrap">
+        <button id="color-btn" class="tool color-btn" title="Color" aria-haspopup="true" aria-expanded="false"><span id="color-current" class="swatch"></span></button>
+        <div id="color-menu" class="popover color-menu">
+          <div class="swatches" role="group" aria-label="Color">
+          <button class="swatch active" data-color="#ff3b6b" title="Red"></button>
+          <button class="swatch" data-color="#ff8a00" title="Orange"></button>
+          <button class="swatch" data-color="#ffd23f" title="Yellow"></button>
+          <button class="swatch" data-color="#7dff5a" title="Green"></button>
+          <button class="swatch" data-color="#3bf0ff" title="Cyan"></button>
+          <button class="swatch" data-color="#3d7bff" title="Blue"></button>
+          <button class="swatch" data-color="#b26bff" title="Purple"></button>
+          <button class="swatch" data-color="#ff4fd8" title="Pink"></button>
+          <button class="swatch" data-color="#ffffff" title="White"></button>
+          <button class="swatch" data-color="#111111" title="Black"></button>
+          </div>
+        </div>
       </div>
       <span class="sep"></span>
       <button id="clear" class="tool" title="Erase all marks (E)">🧽 Erase</button>
       <div class="react-wrap">
         <button id="react-btn" class="tool" title="Send a reaction (keys 1-8)" aria-haspopup="true" aria-expanded="false">😀 React</button>
         <div id="react-menu" class="react-menu" role="menu" hidden></div>
+      </div>
+    </div>
+    <!-- streamer controls: shown here while sharing -->
+    <div id="share-tools" class="tools" hidden>
+      <span class="live-pill">LIVE</span>
+      <button id="change-source" class="tool source-btn" title="Change what you're sharing">🖥️ <span id="source-name" class="source-name"></span> <span class="caret">▾</span></button>
+      <span class="sep"></span>
+      <button id="return-game" class="tool" title="Hide this window and go back to your game">🎮 Return to game</button>
+      <button id="test-draw" class="tool" title="Draws a sample mark on your screen so you can check it shows up on top of your game">✏️ Test drawing</button>
+      <div id="invite-wrap" class="pop-wrap">
+        <button id="invite-btn" class="tool" aria-haspopup="true" aria-expanded="false" title="Invite someone">🔗 Invite</button>
+        <div id="invite-menu" class="popover invite-menu">
+          <div class="pop-title">Invite</div>
+          <div id="code-mini" class="code otp-display"></div>
+          <div class="pop-actions">
+            <button id="copy-invite-2" class="primary small">Copy invite link</button>
+            <button id="copy-code-2" class="ghost small">Copy code</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -57,107 +81,15 @@
         </div>
       </div>
     </div>
-    <button id="end" class="danger small" hidden>End session</button>
-    <button id="open-settings" class="icon-btn" title="Settings" aria-label="Settings">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    </button>
-  </div>
-</header>
-
-<div id="update-bar" class="update-bar" hidden>
-  <span id="update-text"></span>
-  <button id="update-btn" class="primary small">Update now</button>
-  <button id="update-dismiss" class="link">Later</button>
-</div>
-
-<main id="main">
-  <!-- 1. name -->
-  <section id="step-name" class="step">
-    <p class="eyebrow">Let's play</p>
-    <h1>What's your gamer tag?</h1>
-    <form id="name-form" class="row">
-      <input id="name" type="text" maxlength="24" placeholder="Gamer tag" autocomplete="off" spellcheck="false" required>
-      <button class="primary" type="submit">Next →</button>
-    </form>
-    <p class="note pick-label">Pick an avatar, or upload a photo. Your friend sees it next to your name.</p>
-    <div id="avatar-picker-name"></div>
-  </section>
-
-  <!-- 2. role -->
-  <section id="step-role" class="step" hidden>
-    <p class="eyebrow">Pick your part</p>
-    <h1>What do you want to do?</h1>
-    <p id="role-note" class="note" hidden></p>
-    <div class="cards">
-      <button id="go-share" class="card">
-        <span class="card-icon">🎮</span>
-        <strong>Share my game</strong>
-        <span>I'm playing. My friend watches and draws on my screen.</span>
+    <div id="stream-set" class="pop-wrap" hidden>
+      <button id="stream-set-btn" class="icon-btn" aria-haspopup="true" aria-expanded="false" title="Stream settings">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2.2" fill="#161a22"/><circle cx="15" cy="12" r="2.2" fill="#161a22"/><circle cx="8" cy="18" r="2.2" fill="#161a22"/></svg>
       </button>
-      <button id="go-join" class="card">
-        <span class="card-icon">✏️</span>
-        <strong>Join a friend</strong>
-        <span>I have a code. I'll watch and point things out.</span>
-      </button>
-    </div>
-  </section>
-
-  <!-- 3a. pick screen -->
-  <section id="step-pick" class="step" hidden>
-    <p class="eyebrow">Share my game</p>
-    <h1>What do you want to share?</h1>
-    <p class="note">Pick your game to share just that window, or share a whole screen. You can switch any time.</p>
-    <div id="perm" class="warn" hidden>
-      <p><b>Screen Recording permission needed.</b> In System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, turn on <b><span data-brand></span></b>, then quit and reopen <span data-brand></span>.</p>
-      <button id="open-perm" class="ghost small">Open System Settings</button>
-    </div>
-    <div id="sources" class="source-picker"></div>
-    <div class="row gap">
-      <button id="pick-back" class="ghost">← Back</button>
-      <button id="pick-refresh" class="ghost">Refresh</button>
-    </div>
-  </section>
-
-  <!-- 3b. sharing -->
-  <section id="step-share" class="step share waiting" hidden>
-    <div class="share-top">
-      <span class="live-pill">LIVE</span>
-      <span id="source-name" class="source-name"></span>
-      <button id="change-source" class="link">Change</button>
-    </div>
-    <h1 id="share-title">Invite your friend</h1>
-    <p id="track-note" class="note track-note"></p>
-
-    <!-- what the friend sees (paused while this app is in the background) -->
-    <div id="preview" class="preview" hidden>
-      <video id="preview-video" muted playsinline></video>
-      <canvas id="preview-draw"></canvas>
-      <div id="preview-paused" class="preview-paused" hidden>Preview paused while you play</div>
-    </div>
-
-    <!-- shown once a friend is watching -->
-    <div class="live-card">
-      <div id="live-who" class="live-who"></div>
-      <div class="live-actions">
-        <button id="return-game" class="primary">Return to game</button>
-        <button id="test-draw" class="ghost" title="Draws a sample mark on your screen so you can check it shows up on top of your game">✏️ Test drawing</button>
-      </div>
-    </div>
-
-    <!-- before anyone joins this is the whole screen; once live it shrinks to one line -->
-    <div class="invite">
-      <button id="copy-invite" class="primary hero-btn" title="Copies a message with a link. Paste it in Discord, a text, anywhere.">Copy invite link</button>
-      <p class="code-line">Code <span id="code" class="code">······</span> <button id="copy-code" class="link">Copy code</button></p>
-    </div>
-
-    <p id="share-status" class="status">Starting…</p>
-    <p id="overlay-hidden" class="warn-inline" hidden>Drawings are hidden. Press <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> to show them again.</p>
-    <p id="q-hint" class="warn-inline"></p>
-
-    <details class="stream-settings">
-      <summary>Stream settings</summary>
+      <div id="stream-set-menu" class="popover stream-menu">
+        <div class="pop-title">Stream settings</div>
+        <p id="track-note" class="note track-note"></p>
       <div class="set-block">
-        <p class="set-title">Video quality <span class="note">(changes apply right away)</span></p>
+        <p class="set-title">Video quality <span class="note">(applies right away)</span></p>
       <div class="q-grid">
         <label>Resolution
           <select id="q-res">
@@ -223,7 +155,88 @@
         <p class="note">Drawings appear over fullscreen games and fade after a few seconds; your mouse and keyboard still go to the game. If a game hides them, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b>. You'll still hear the sound cue either way.</p>
         <button id="restart-stream" class="ghost small" title="Fresh capture + fresh video connection. Your friend stays connected.">🔄 Restart stream</button>
       </div>
-    </details>
+      </div>
+    </div>
+    <button id="end" class="danger small" hidden>End session</button>
+    <button id="open-settings" class="icon-btn" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="update-bar" class="update-bar" hidden>
+  <span id="update-text"></span>
+  <button id="update-btn" class="primary small">Update now</button>
+  <button id="update-dismiss" class="link">Later</button>
+</div>
+
+<main id="main">
+  <!-- 1. name -->
+  <section id="step-name" class="step">
+    <p class="eyebrow">Let's play</p>
+    <h1>What's your gamer tag?</h1>
+    <form id="name-form" class="row">
+      <input id="name" type="text" maxlength="24" placeholder="Gamer tag" autocomplete="off" spellcheck="false" required>
+      <button class="primary" type="submit">Next →</button>
+    </form>
+    <p class="note pick-label">Pick an avatar, or upload a photo. Your friend sees it next to your name.</p>
+    <div id="avatar-picker-name"></div>
+  </section>
+
+  <!-- 2. role -->
+  <section id="step-role" class="step" hidden>
+    <p class="eyebrow">Pick your part</p>
+    <h1>What do you want to do?</h1>
+    <p id="role-note" class="note" hidden></p>
+    <div class="cards">
+      <button id="go-share" class="card">
+        <span class="card-icon">🎮</span>
+        <strong>Share my game</strong>
+        <span>I'm playing. My friend watches and draws on my screen.</span>
+      </button>
+      <button id="go-join" class="card">
+        <span class="card-icon">✏️</span>
+        <strong>Join a friend</strong>
+        <span>I have a code. I'll watch and point things out.</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- 3a. pick screen -->
+  <section id="step-pick" class="step" hidden>
+    <p class="eyebrow">Share my game</p>
+    <h1>What do you want to share?</h1>
+    <p class="note">Pick your game to share just that window, or share a whole screen. You can switch any time.</p>
+    <div id="perm" class="warn" hidden>
+      <p><b>Screen Recording permission needed.</b> In System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, turn on <b><span data-brand></span></b>, then quit and reopen <span data-brand></span>.</p>
+      <button id="open-perm" class="ghost small">Open System Settings</button>
+    </div>
+    <div id="sources" class="source-picker"></div>
+    <div class="row gap">
+      <button id="pick-back" class="ghost">← Back</button>
+      <button id="pick-refresh" class="ghost">Refresh</button>
+    </div>
+  </section>
+
+  <!-- 3b. sharing: the shared source fills the window, controls are in the header -->
+  <section id="step-share" class="watch share-view waiting" hidden>
+    <div id="share-stage" class="stage">
+      <video id="preview-video" muted playsinline></video>
+      <canvas id="preview-draw"></canvas>
+      <div id="preview-paused" class="preview-paused" hidden>Preview paused while you play</div>
+      <div class="stage-notes">
+        <p id="overlay-hidden" class="stage-note warn" hidden>Drawings are hidden. Press <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> to show them again.</p>
+        <p id="q-hint" class="stage-note warn"></p>
+        <p id="share-status" class="stage-note status">Starting…</p>
+      </div>
+      <!-- before anyone joins -->
+      <div class="invite-card">
+        <h1 id="share-title">Invite your friend</h1>
+        <button id="copy-invite" class="primary hero-btn" title="Copies a message with a link. Paste it in Discord, a text, anywhere.">Copy invite link</button>
+        <p class="code-line">Code <span id="code" class="code"></span> <button id="copy-code" class="link">Copy code</button></p>
+      </div>
+    </div>
+    <div id="preview" hidden></div>
   </section>
 
   <!-- 3c. join -->

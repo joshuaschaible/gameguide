@@ -333,3 +333,49 @@ dialog::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { border-color: va
 @keyframes blink { 50% { opacity: 0; } }
 .otp-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; font-size: 16px; cursor: text; caret-color: transparent; }
 .join-form #join-btn { padding-left: 22px; padding-right: 22px; }
+
+/* ---------- streamer: fullscreen view, controls in the header ---------- */
+.share-view .stage { display: block; }
+.share-view .stage video { object-fit: contain; }
+.share-view .stage canvas { pointer-events: none; cursor: default; }
+.share-view .preview-paused { left: 50%; top: 50%; bottom: auto; transform: translate(-50%, -50%); font-size: 13px; padding: 8px 14px; }
+.live-pill { display: none; }
+body.share-live .top .live-pill { display: inline-block; animation: pulse 1.2s infinite alternate; }
+.source-btn { max-width: 260px; display: inline-flex; align-items: center; gap: 6px; }
+.source-btn .source-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text); max-width: 190px; }
+.source-btn .caret { color: var(--muted); font-size: 11px; }
+
+/* invite card floats over the preview until someone joins */
+.invite-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, 90%); text-align: center; background: rgba(16,19,26,.86); border: 1px solid var(--line); border-radius: 18px; padding: 28px 28px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.55); }
+.invite-card h1 { font-size: 30px; margin: 0 0 20px; }
+.invite-card .hero-btn { width: 100%; }
+.invite-card .code-line { justify-content: center; margin-top: 16px; }
+.share-view.live .invite-card { display: none; }
+
+/* status / hints as small notes on the preview */
+.stage-notes { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 80%; pointer-events: none; z-index: 2; }
+.stage-note { margin: 0; background: rgba(13,15,20,.88); border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; font-size: 13px; line-height: 1.4; text-align: center; color: var(--muted); }
+.stage-note:empty { display: none; }
+.stage-note.warn { color: var(--warn); border-color: rgba(251,191,36,.45); }
+.stage-note.status.good { color: var(--good); border-color: rgba(74,222,128,.4); }
+.stage-note.status.bad { color: var(--bad); border-color: rgba(255,93,108,.45); }
+.stage-note.status.busy::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--warn); animation: pulse 1s infinite alternate; }
+.share-view.waiting .stage-note.status { display: none; } /* the invite card says it */
+.share-view.live .stage-note.status.good { animation: fade-away .4s 5s forwards; }
+@keyframes fade-away { to { opacity: 0; visibility: hidden; } }
+
+/* invite + stream settings dropdowns */
+.invite-menu { left: 0; right: auto; min-width: 260px; }
+.invite-menu .otp-display { margin: 0 4px 4px; }
+.invite-menu .otp-display .otp-cell { width: 30px; height: 38px; font-size: 18px; }
+.stream-menu { width: 400px; max-height: calc(100vh - 100px); overflow-y: auto; }
+.stream-menu .set-block { margin-top: 10px; }
+.stream-menu .track-note { margin: 0 4px 4px; font-size: 12px; }
+.stream-menu .track-note:empty { display: none; }
+
+/* one color showing; click for the palette */
+.color-btn { padding: 5px 8px; display: inline-flex; align-items: center; }
+.color-btn .swatch { width: 22px; height: 22px; display: inline-block; border: 2px solid rgba(255,255,255,.8); }
+.color-menu { left: 0; right: auto; min-width: 0; padding: 8px; }
+.color-menu .swatches { display: grid; grid-template-columns: repeat(5, 26px); gap: 8px; }
+.color-menu .swatches .swatch { width: 26px; height: 26px; }

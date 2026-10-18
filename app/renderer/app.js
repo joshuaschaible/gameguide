@@ -61,7 +61,9 @@
     for (const s of STEPS) $(s).hidden = s !== id;
     $('end').hidden = !['step-share', 'step-watch'].includes(id) && !(id === 'step-join' && !S.ended);
     $('tools').hidden = id !== 'step-watch';
-    document.body.classList.toggle('watching', id === 'step-watch');
+    $('share-tools').hidden = id !== 'step-share';
+    $('stream-set').hidden = id !== 'step-share';
+    document.body.classList.toggle('watching', id === 'step-watch' || id === 'step-share');
     if (id !== 'step-watch' && $('react-menu')) $('react-menu').hidden = true;
     renderChips();
     updateConn();
@@ -119,15 +121,16 @@
   }
   // The 6-character code, one box per character (blank boxes while waiting).
   function setCodeBoxes(code) {
-    const el = $('code');
-    el.innerHTML = '';
-    el.classList.add('otp-display');
     const chars = String(code || '').split('');
-    for (let i = 0; i < 6; i++) {
-      const c = document.createElement('span');
-      c.className = chars[i] ? 'otp-cell' : 'otp-cell empty';
-      c.textContent = chars[i] || '·';
-      el.appendChild(c);
+    for (const el of [$('code'), $('code-mini')]) {
+      el.innerHTML = '';
+      el.classList.add('otp-display');
+      for (let i = 0; i < 6; i++) {
+        const c = document.createElement('span');
+        c.className = chars[i] ? 'otp-cell' : 'otp-cell empty';
+        c.textContent = chars[i] || '·';
+        el.appendChild(c);
+      }
     }
   }
 
@@ -137,6 +140,7 @@
     const el = $('step-share');
     el.classList.toggle('live', !!live);
     el.classList.toggle('waiting', !live);
+    document.body.classList.toggle('share-live', !!live);
     renderLiveCard();
   }
   function renderLiveCard() {
@@ -1740,8 +1744,7 @@
   }
   function updatePreview() {
     const has = S.role === 'share' && !S.ended && !!S.stream;
-    $('preview').hidden = !has;
-    if (!has) { if (pVideo.srcObject) pVideo.srcObject = null; return; }
+    if (!has) { if (pVideo.srcObject) pVideo.srcObject = null; $('preview-paused').hidden = true; return; }
     if (previewWanted()) {
       if (pVideo.srcObject !== S.stream) pVideo.srcObject = S.stream;
       if (pVideo.paused) pVideo.play().catch(() => {});
@@ -1843,8 +1846,15 @@
     drawState.color = color;
     store.set('app.color', color);
     document.querySelectorAll('.swatch[data-color]').forEach((x) => x.classList.toggle('active', x.dataset.color.toLowerCase() === color));
+    $('color-current').style.setProperty('--c', color);
+    const name = document.querySelector(`.swatch[data-color="${color}"]`);
+    $('color-btn').title = `Color: ${name ? name.title : color} (click for more)`;
   }
-  document.querySelectorAll('.swatch[data-color]').forEach((b) => b.addEventListener('click', () => setColor(b.dataset.color)));
+  document.querySelectorAll('.swatch[data-color]').forEach((b) => b.addEventListener('click', () => {
+    setColor(b.dataset.color);
+    $('color-menu').classList.remove('open');
+    $('color-btn').setAttribute('aria-expanded', 'false');
+  }));
   setColor(drawState.color);
   $('clear').addEventListener('click', () => send({ t: 'clear' }));
   $('refresh-video').addEventListener('click', () => {
@@ -1917,6 +1927,9 @@
   const menus = [
     { btn: 'people-btn', menu: 'people-menu' },
     { btn: 'conn-btn', menu: 'conn-menu', onOpen: fillConnMenu },
+    { btn: 'invite-btn', menu: 'invite-menu' },
+    { btn: 'stream-set-btn', menu: 'stream-set-menu' },
+    { btn: 'color-btn', menu: 'color-menu' },
   ];
   function closeMenus(except) {
     for (const m of menus) {
@@ -2004,6 +2017,19 @@
     await bridge.copy(S.code);
     $('copy-code').textContent = 'Copied ✓';
     setTimeout(() => { $('copy-code').textContent = 'Copy code'; }, 1500);
+  });
+  $('copy-invite-2').addEventListener('click', async () => {
+    if (!S.code) return;
+    await bridge.copy(inviteText(S.code));
+    log('invite copied');
+    $('copy-invite-2').textContent = 'Copied ✓';
+    setTimeout(() => { $('copy-invite-2').textContent = 'Copy invite link'; }, 1500);
+  });
+  $('copy-code-2').addEventListener('click', async () => {
+    if (!S.code) return;
+    await bridge.copy(S.code);
+    $('copy-code-2').textContent = 'Copied ✓';
+    setTimeout(() => { $('copy-code-2').textContent = 'Copy code'; }, 1500);
   });
   $('return-game').addEventListener('click', () => bridge.minimize());
   $('change-source').addEventListener('click', openSourceDialog);
