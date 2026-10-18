@@ -491,8 +491,11 @@ app.whenReady().then(() => {
         types: ['window', 'screen'],
         thumbnailSize: { width: 0, height: 0 },
       });
+      // Never swap in a different source on our own: if the chosen window is
+      // gone (game closed), fail, and the app asks the player what to share.
+      // Only a screen falls back to a screen (ids can change when displays do).
       const src = sources.find((s) => s.id === selectedSourceId)
-        || sources.find((s) => s.id.startsWith('screen:'));
+        || (String(selectedSourceId).startsWith('screen:') ? sources.find((s) => s.id.startsWith('screen:')) : null);
       if (!src) return callback({});
       callback({ video: src });
     } catch {
@@ -505,7 +508,16 @@ app.whenReady().then(() => {
 
   ipcMain.on('brand:get', (e) => { e.returnValue = { name: BRAND.name, id: BRAND.id }; });
   ipcMain.handle('sources:list', () => listSources());
-  ipcMain.handle('sources:select', (_e, id) => { selectedSourceId = String(id); return true; });
+  // Returns false when that window no longer exists (e.g. the game closed),
+  // so the app never calls capture for it (an empty capture reply can crash).
+  ipcMain.handle('sources:select', async (_e, id) => {
+    selectedSourceId = String(id);
+    if (selectedSourceId.startsWith('screen:')) return true;
+    try {
+      const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } });
+      return sources.some((s) => s.id === selectedSourceId);
+    } catch { return true; }
+  });
   ipcMain.handle('overlay:open', (_e, t) => { openOverlay(t); return true; });
   ipcMain.handle('overlay:close', () => { closeOverlay(); return true; });
   ipcMain.on('overlay:draw', (_e, msg) => {

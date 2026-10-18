@@ -241,7 +241,7 @@ dialog::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { border-color: va
 .people-btn:hover { background: var(--panel-2); }
 .avatar-stack { display: flex; align-items: center; }
 .avatar-stack .avatar.stacked { box-shadow: 0 0 0 2px var(--bg); position: relative; }
-.avatar-stack .avatar.stacked + .avatar.stacked { margin-left: -10px; }
+.avatar-stack .avatar.stacked + .avatar.stacked { margin-left: -4px; }
 .person { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 8px; }
 .person-text { min-width: 0; }
 .person-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -266,8 +266,6 @@ dialog::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { border-color: va
 .share { width: min(620px, 92vw); }
 .share-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: var(--muted); font-size: 14px; }
 .share-top .source-name { color: var(--text); max-width: none; font-weight: 600; }
-.live-pill { display: none; font-size: 11px; font-weight: 800; letter-spacing: 1px; color: #fff; background: var(--bad); border-radius: 6px; padding: 2px 7px; }
-.share.live .live-pill { display: inline-block; animation: pulse 1.2s infinite alternate; }
 
 /* waiting: one big action */
 .share.waiting h1 { font-size: 40px; margin-bottom: 26px; }
@@ -339,8 +337,6 @@ dialog::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { border-color: va
 .share-view .stage video { object-fit: contain; }
 .share-view .stage canvas { pointer-events: none; cursor: default; }
 .share-view .preview-paused { left: 50%; top: 50%; bottom: auto; transform: translate(-50%, -50%); font-size: 13px; padding: 8px 14px; }
-.live-pill { display: none; }
-body.share-live .top .live-pill { display: inline-block; animation: pulse 1.2s infinite alternate; }
 .source-btn { max-width: 260px; display: inline-flex; align-items: center; gap: 6px; }
 .source-btn .source-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text); max-width: 190px; }
 .source-btn .caret { color: var(--muted); font-size: 11px; }
@@ -361,7 +357,7 @@ body.share-live .top .live-pill { display: inline-block; animation: pulse 1.2s i
 .stage-note.status.bad { color: var(--bad); border-color: rgba(255,93,108,.45); }
 .stage-note.status.busy::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--warn); animation: pulse 1s infinite alternate; }
 .share-view.waiting .stage-note.status { display: none; } /* the invite card says it */
-.share-view.live .stage-note.status.good { animation: fade-away .4s 5s forwards; }
+.share-view .stage-note.status.good { display: none; } /* the LIVE pill, source button and avatars already say it */
 @keyframes fade-away { to { opacity: 0; visibility: hidden; } }
 
 /* invite + stream settings dropdowns */
@@ -379,3 +375,18 @@ body.share-live .top .live-pill { display: inline-block; animation: pulse 1.2s i
 .color-menu { left: 0; right: auto; min-width: 0; padding: 8px; }
 .color-menu .swatches { display: grid; grid-template-columns: repeat(5, 26px); gap: 8px; }
 .color-menu .swatches .swatch { width: 26px; height: 26px; }
+
+/* "+" invite button tucked into the avatar stack */
+.invite-wrap { margin-left: -20px; } /* sits in the stack like one more avatar */
+.add-person { width: 28px; height: 28px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #232733; color: var(--muted); border: 1.5px dashed rgba(255,255,255,.28); box-shadow: 0 0 0 2px var(--bg); cursor: pointer; position: relative; transition: color .15s, border-color .15s, background .15s; }
+.add-person:hover, .add-person[aria-expanded="true"] { color: var(--text); border-color: var(--accent); background: #2b2f3d; }
+
+/* One height for every control in the top bar */
+.top .tool, .top button.small, .top .icon-btn, .top .color-btn {
+  box-sizing: border-box; height: 36px; padding-top: 0; padding-bottom: 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: 14px; line-height: 1;
+}
+.top .tool, .top button.small { padding-left: 12px; padding-right: 12px; }
+.top .color-btn { padding-left: 7px; padding-right: 7px; }
+.top .icon-btn { width: 36px; padding: 0; }

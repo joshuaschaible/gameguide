@@ -41,22 +41,7 @@
     </div>
     <!-- streamer controls: shown here while sharing -->
     <div id="share-tools" class="tools" hidden>
-      <span class="live-pill">LIVE</span>
       <button id="change-source" class="tool source-btn" title="Change what you're sharing">🖥️ <span id="source-name" class="source-name"></span> <span class="caret">▾</span></button>
-      <span class="sep"></span>
-      <button id="return-game" class="tool" title="Hide this window and go back to your game">🎮 Return to game</button>
-      <button id="test-draw" class="tool" title="Draws a sample mark on your screen so you can check it shows up on top of your game">✏️ Test drawing</button>
-      <div id="invite-wrap" class="pop-wrap">
-        <button id="invite-btn" class="tool" aria-haspopup="true" aria-expanded="false" title="Invite someone">🔗 Invite</button>
-        <div id="invite-menu" class="popover invite-menu">
-          <div class="pop-title">Invite</div>
-          <div id="code-mini" class="code otp-display"></div>
-          <div class="pop-actions">
-            <button id="copy-invite-2" class="primary small">Copy invite link</button>
-            <button id="copy-code-2" class="ghost small">Copy code</button>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
   <div class="top-right">
@@ -65,6 +50,17 @@
         <span id="chips" class="avatar-stack"></span>
       </button>
       <div id="people-menu" class="popover people-menu" role="menu"></div>
+    </div>
+    <div id="invite-wrap" class="pop-wrap invite-wrap" hidden>
+      <button id="invite-btn" class="add-person" aria-haspopup="true" aria-expanded="false" title="Invite someone"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button>
+      <div id="invite-menu" class="popover invite-menu">
+        <div class="pop-title">Invite</div>
+        <div id="code-mini" class="code otp-display"></div>
+        <div class="pop-actions">
+          <button id="copy-invite-2" class="primary small">Copy invite link</button>
+          <button id="copy-code-2" class="ghost small">Copy code</button>
+        </div>
+      </div>
     </div>
     <div id="conn" class="pop-wrap" hidden>
       <button id="conn-btn" class="icon-btn sig sig-none" aria-haspopup="true" aria-expanded="false" title="Connection">
@@ -153,6 +149,7 @@
       </div>
       <div class="set-block">
         <p class="note">Drawings appear over fullscreen games and fade after a few seconds; your mouse and keyboard still go to the game. If a game hides them, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b>. You'll still hear the sound cue either way.</p>
+        <button id="test-draw" class="ghost small" title="Draws a sample mark on your screen so you can check it shows up on top of your game">✏️ Test drawing</button>
         <button id="restart-stream" class="ghost small" title="Fresh capture + fresh video connection. Your friend stays connected.">🔄 Restart stream</button>
       </div>
       </div>

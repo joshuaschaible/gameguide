@@ -62,6 +62,7 @@
     $('end').hidden = !['step-share', 'step-watch'].includes(id) && !(id === 'step-join' && !S.ended);
     $('tools').hidden = id !== 'step-watch';
     $('share-tools').hidden = id !== 'step-share';
+    updateInviteBtn();
     $('stream-set').hidden = id !== 'step-share';
     document.body.classList.toggle('watching', id === 'step-watch' || id === 'step-share');
     if (id !== 'step-watch' && $('react-menu')) $('react-menu').hidden = true;
@@ -71,6 +72,14 @@
   }
   // Who's here: overlapping avatars; hover or click shows a list with names,
   // who is streaming/watching, and which one is you.
+  // The "+" next to the avatars: invite someone. Only while nobody has joined.
+  function updateInviteBtn() {
+    const friendIn = !!(S.peerProfile || (S.conn && S.conn.open));
+    const show = S.role === 'share' && !S.ended && !$('step-share').hidden && !friendIn;
+    $('invite-wrap').hidden = !show;
+    if (!show) { $('invite-menu').classList.remove('open'); $('invite-btn').setAttribute('aria-expanded', 'false'); }
+  }
+
   function renderChips() {
     const stack = $('chips');
     const menu = $('people-menu');
@@ -80,6 +89,7 @@
     if (S.name) people.push({ name: S.name, avatar: S.avatar, you: true, role: S.role === 'share' ? 'Streaming' : S.role === 'join' ? 'Watching' : '' });
     if (S.peerProfile) people.push({ name: S.peerProfile.name, avatar: S.peerProfile.avatar, you: false, role: S.role === 'share' ? 'Watching' : 'Streaming' });
     $('people').hidden = !people.length;
+    updateInviteBtn();
     if (S.role === 'share') renderLiveCard();
     // In the stack you are always in front (leftmost, on top); others behind.
     people.forEach((p, i, arr) => {
@@ -198,7 +208,7 @@
 
   function setStatus(el, text, kind) {
     el.textContent = text;
-    el.className = `status ${kind || ''}`.trim();
+    el.className = `${el.classList.contains('stage-note') ? 'stage-note ' : ''}status ${kind || ''}`.trim();
   }
 
   // ---------- ICE / signaling config ----------
@@ -841,7 +851,9 @@
 
   // Starts capturing one source. Returns the new stream (not yet in use).
   async function captureSource(source) {
-    await bridge.selectSource(source.id);
+    if (await bridge.selectSource(source.id) === false) {
+      const e = new Error(`"${source.name}" is no longer open`); e.name = 'SourceGone'; throw e;
+    }
     const q = quality();
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: { ideal: q.fps, max: 60 }, width: { max: 7680 }, height: { max: 4320 } },
@@ -2046,7 +2058,6 @@
     $('copy-code-2').textContent = 'Copied ✓';
     setTimeout(() => { $('copy-code-2').textContent = 'Copy code'; }, 1500);
   });
-  $('return-game').addEventListener('click', () => bridge.minimize());
   $('change-source').addEventListener('click', openSourceDialog);
 
   // Draws a sample mark on the player's own screen (overlay check).

@@ -19,6 +19,12 @@ const path = require('path');
     const o = await pc.createOffer(); pc.close();
     return o.sdp.split('\r\n').filter((l) => l.startsWith('m=video')).join('');
   }));
+  // A window that no longer exists must be refused (never swapped for the whole screen).
+  console.log('closed window select:', await win.evaluate(async () => {
+    const gone = await window.bridge.selectSource('window:999999:0');
+    const scr = await window.bridge.selectSource('screen:0:0');
+    return gone === false && scr === true ? 'OK refused closed window' : `FAIL gone=${gone} screen=${scr}`;
+  }));
   console.log('version text:', await win.textContent('#version'));
   await win.evaluate(() => { localStorage.setItem('app.onboarded', 'true'); const d = document.getElementById('welcome'); if (d.open) d.close(); });
   if (await win.isVisible('#step-name')) { await win.fill('#name', 'Tester'); await win.click('#name-form button'); }

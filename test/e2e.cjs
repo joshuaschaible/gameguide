@@ -76,6 +76,11 @@ const stub = (name) => `
   const code = await player.textContent('#code');
   await player.screenshot({ path: '/tmp/claude-0/ui-share-waiting.png' });
   console.log('code', code);
+  console.log('invite + shown while waiting:', await player.evaluate(() => !document.getElementById('invite-wrap').hidden));
+  await player.click('#invite-btn');
+  await player.waitForTimeout(200);
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-invite.png', clip: { x: 500, y: 0, width: 700, height: 280 } });
+  await player.keyboard.press('Escape');
   await player.click('#copy-code');
   console.log('copied', await player.evaluate(() => window.__copied));
 
@@ -126,10 +131,7 @@ const stub = (name) => `
   await player.waitForTimeout(200);
   await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png' });
   await player.keyboard.press('Escape');
-  await player.click('#invite-btn');
-  await player.waitForTimeout(200);
-  await player.screenshot({ path: '/tmp/claude-0/ui-share-invite.png', clip: { x: 0, y: 0, width: 700, height: 260 } });
-  await player.keyboard.press('Escape');
+  console.log('invite + hidden once friend is in:', await player.evaluate(() => document.getElementById('invite-wrap').hidden));
   await friend.click('#color-btn');
   await friend.waitForTimeout(200);
   await friend.screenshot({ path: '/tmp/claude-0/ui-colors.png', clip: { x: 0, y: 0, width: 600, height: 200 } });
