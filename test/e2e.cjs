@@ -340,6 +340,11 @@ const stub = (name) => `
   await player.click('#restart-stream');
   await player.waitForTimeout(5000);
   console.log('player restart-stream:', await player.textContent('#share-status'), '| friend:', await friend.textContent('#watch-status'));
+  // pairing service drops while friend is connected: no scary error
+  await player.evaluate(() => { const p = window.__app.peer; p.emit('error', Object.assign(new Error('Lost connection to server.'), { type: 'network' })); });
+  await player.waitForTimeout(300);
+  const sigStatus = await player.textContent('#share-status');
+  console.log('signaling drop while connected:', sigStatus, '|', /online/i.test(sigStatus) ? 'FAIL shows error' : 'OK');
   console.log('friend after auto-restart:', await friend.textContent('#watch-status'), JSON.stringify(await friend.evaluate(() => [document.getElementById('freeze').hidden, document.getElementById('freeze').textContent])));
   console.log('friend banner during stall:', JSON.stringify(await friend.evaluate(() => [document.getElementById('freeze').hidden, document.getElementById('freeze').textContent])));
   await friend.click('#open-settings');

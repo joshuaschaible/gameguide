@@ -1036,6 +1036,12 @@
         return;
       }
       if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) {
+        if ((S.conn && S.conn.open) || S.awaitRelink || S.call) {
+          // Friend is already connected directly; the pairing service only
+          // matters for setting up new connections. Reconnect quietly.
+          later(4000, () => { if (!S.ended && S.peer === peer && !peer.destroyed && peer.disconnected) { try { peer.reconnect(); } catch { /* ignore */ } } });
+          return;
+        }
         if (!S.conn) {
           setCodeBoxes('');
           $('copy-code').disabled = true; $('copy-invite').disabled = true;
@@ -1061,7 +1067,16 @@
     clearInterval(S.sigTimer);
     let wait = 0;
     let tries = 0;
-    peer.on('open', () => { if (tries) log('pairing service reconnected'); tries = 0; wait = 0; });
+    peer.on('open', () => {
+      if (tries) log('pairing service reconnected');
+      tries = 0; wait = 0;
+      // Clear a stale "Couldn't get online… Retrying" once we're back.
+      const st = $('share-status');
+      if (S.role === 'share' && st && /Retrying…$/.test(st.textContent)) {
+        if ((S.conn && S.conn.open) || S.awaitRelink || S.call) setStatus(st, `Connected. ${(S.peerProfile && S.peerProfile.name) || 'Your friend'} can see your screen and draw on it.`, 'good');
+        else if (S.code) setStatus(st, 'Waiting for your friend to enter the code…', 'busy');
+      }
+    });
     S.sigTimer = setInterval(() => {
       if (S.ended || S.peer !== peer || peer.destroyed) { clearInterval(S.sigTimer); return; }
       if (!peer.disconnected) return;
