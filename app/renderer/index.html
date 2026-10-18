@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'self' https: wss: ws: http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'none'">
   <title></title>
   <link rel="stylesheet" href="style.css">
+  <script src="theme.js"></script>
 </head>
 <body>
 <header class="top">
@@ -282,7 +283,7 @@
     <div class="slide-icon">✏️</div>
     <h2>Draw on their game</h2>
     <p>Use <b>Pen</b> to draw and <b>Pointer</b> to ping a spot. Your marks show up on top of their game and fade after a few seconds (change how long in Settings).</p>
-    <p>Sharing? Click <b>Test drawing</b> to see what your friend's marks will look like.</p>
+    <p>Sharing? Open stream settings (the sliders button) and click <b>Test drawing</b> to see what your friend's marks will look like.</p>
   </div>
   <div class="welcome-foot">
     <div class="dots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>
@@ -299,7 +300,7 @@
   <div id="dialog-sources" class="dialog-sources"></div>
   <div class="row gap end">
     <button id="dialog-refresh" class="ghost">Refresh</button>
-    <button id="dialog-cancel" class="primary">Cancel</button>
+    <button id="dialog-cancel" class="ghost">Cancel</button>
   </div>
 </dialog>
 
@@ -308,8 +309,8 @@
   <p class="note">Share this with whoever is helping you troubleshoot. It contains no codes or keys.</p>
   <pre id="details-text"></pre>
   <div class="row gap end">
-    <button id="details-copy" class="ghost">Copy</button>
-    <button id="details-close" class="primary">Close</button>
+    <button id="details-close" class="ghost">Close</button>
+    <button id="details-copy" class="primary">Copy</button>
   </div>
 </dialog>
 
@@ -318,6 +319,18 @@
   <label>Gamer tag <input id="settings-name" type="text" maxlength="24"></label>
   <p class="note pick-label">Avatar</p>
   <div id="avatar-picker-settings"></div>
+
+  <div class="set-section">
+    <p class="set-title">Appearance</p>
+    <div class="set-row">
+      <span class="note">Theme</span>
+      <div id="theme-seg" class="seg" role="radiogroup" aria-label="Theme">
+        <button type="button" data-theme-opt="system" role="radio">System</button>
+        <button type="button" data-theme-opt="dark" role="radio">Dark</button>
+        <button type="button" data-theme-opt="light" role="radio">Light</button>
+      </div>
+    </div>
+  </div>
 
   <div class="set-section">
     <p class="set-title">Drawing</p>
@@ -351,7 +364,7 @@
     <div class="set-row">
       <span class="note">Something not working? Copy this and send it to whoever is helping you.</span>
       <div class="row">
-        <button id="copy-details" class="primary small">Copy details</button>
+        <button id="copy-details" class="ghost small">Copy details</button>
         <button id="open-details" class="ghost small">View</button>
       </div>
     </div>

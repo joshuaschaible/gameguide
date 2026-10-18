@@ -6,7 +6,7 @@
 //   screen and shows the friend's marks
 const {
   app, BrowserWindow, ipcMain, desktopCapturer, screen,
-  session, systemPreferences, shell, clipboard, globalShortcut, nativeImage,
+  session, systemPreferences, shell, clipboard, globalShortcut, nativeImage, nativeTheme,
 } = require('electron');
 const path = require('path');
 const native = require('./native');
@@ -100,7 +100,7 @@ function createMainWindow() {
     height: 820,
     minWidth: 820,
     minHeight: 620,
-    backgroundColor: '#0d0f14',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#313338' : '#ffffff',
     title: BRAND.name,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -506,6 +506,11 @@ app.whenReady().then(() => {
     cb(['media', 'display-capture', 'clipboard-sanitized-write'].includes(permission));
   });
 
+  // Theme: drives the native title bar color and the window background.
+  ipcMain.on('theme:set', (_e, mode, bg) => {
+    if (['system', 'dark', 'light'].includes(mode)) nativeTheme.themeSource = mode;
+    if (mainWin && !mainWin.isDestroyed() && /^#[0-9a-f]{6}$/i.test(bg)) mainWin.setBackgroundColor(bg);
+  });
   ipcMain.on('brand:get', (e) => { e.returnValue = { name: BRAND.name, id: BRAND.id }; });
   ipcMain.handle('sources:list', () => listSources());
   // Returns false when that window no longer exists (e.g. the game closed),

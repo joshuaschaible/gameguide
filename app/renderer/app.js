@@ -2205,6 +2205,21 @@
   });
   $('settings-cancel').addEventListener('click', () => $('settings').close());
   $('mark-seconds').addEventListener('input', () => { $('mark-seconds-value').textContent = `${$('mark-seconds').value} s`; });
+  // Theme: applies right away, like Discord.
+  function paintThemeSeg() {
+    const cur = window.Theme ? window.Theme.get() : 'system';
+    document.querySelectorAll('#theme-seg [data-theme-opt]').forEach((b) => {
+      const on = b.dataset.themeOpt === cur;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+  }
+  document.querySelectorAll('#theme-seg [data-theme-opt]').forEach((b) => b.addEventListener('click', () => {
+    if (window.Theme) window.Theme.set(b.dataset.themeOpt);
+    paintThemeSeg();
+  }));
+  paintThemeSeg();
+
   $('settings-save').addEventListener('click', () => {
     const url = $('turn-url').value.trim();
     store.set('app.turn', url ? { url, user: $('turn-user').value.trim(), pass: $('turn-pass').value } : null);

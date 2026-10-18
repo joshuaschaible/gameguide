@@ -34,4 +34,5 @@ contextBridge.exposeInMainWorld('bridge', {
   info: () => ipcRenderer.invoke('app:info'),
   minimize: () => ipcRenderer.invoke('app:minimize'),
   openScreenSettings: () => ipcRenderer.invoke('app:openScreenSettings'),
+  setTheme: (mode, bg) => ipcRenderer.send('theme:set', String(mode), String(bg)),
 });
