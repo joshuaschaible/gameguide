@@ -1,7 +1,7 @@
 {
   "name": "game-guide",
   "productName": "Game Guide",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "Share your game with a friend who can draw on your screen.",
   "main": "main.js",
   "author": "Foundation Studio",

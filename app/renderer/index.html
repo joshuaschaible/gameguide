@@ -15,23 +15,47 @@
       <button class="tool active" data-tool="pen" title="Pen (P)">✏️ Pen</button>
       <button class="tool" data-tool="ping" title="Pointer (O)">📍 Pointer</button>
       <span class="sep"></span>
-      <div class="swatches" role="group" aria-label="Color">
-        <button class="swatch active" data-color="#ff3b6b" title="Red"></button>
-        <button class="swatch" data-color="#ff8a00" title="Orange"></button>
-        <button class="swatch" data-color="#ffd23f" title="Yellow"></button>
-        <button class="swatch" data-color="#7dff5a" title="Green"></button>
-        <button class="swatch" data-color="#3bf0ff" title="Cyan"></button>
-        <button class="swatch" data-color="#3d7bff" title="Blue"></button>
-        <button class="swatch" data-color="#b26bff" title="Purple"></button>
-        <button class="swatch" data-color="#ff4fd8" title="Pink"></button>
-        <button class="swatch" data-color="#ffffff" title="White"></button>
-        <button class="swatch" data-color="#111111" title="Black"></button>
+      <div id="color-wrap" class="pop-wrap color-wrap">
+        <button id="color-btn" class="tool color-btn" title="Color" aria-haspopup="true" aria-expanded="false"><span id="color-current" class="swatch"></span></button>
+        <div id="color-menu" class="popover color-menu">
+          <div class="swatches" role="group" aria-label="Color">
+          <button class="swatch active" data-color="#ff3b6b" title="Red"></button>
+          <button class="swatch" data-color="#ff8a00" title="Orange"></button>
+          <button class="swatch" data-color="#ffd23f" title="Yellow"></button>
+          <button class="swatch" data-color="#7dff5a" title="Green"></button>
+          <button class="swatch" data-color="#3bf0ff" title="Cyan"></button>
+          <button class="swatch" data-color="#3d7bff" title="Blue"></button>
+          <button class="swatch" data-color="#b26bff" title="Purple"></button>
+          <button class="swatch" data-color="#ff4fd8" title="Pink"></button>
+          <button class="swatch" data-color="#ffffff" title="White"></button>
+          <button class="swatch" data-color="#111111" title="Black"></button>
+          </div>
+        </div>
       </div>
       <span class="sep"></span>
       <button id="clear" class="tool" title="Erase all marks (E)">🧽 Erase</button>
       <div class="react-wrap">
         <button id="react-btn" class="tool" title="Send a reaction (keys 1-8)" aria-haspopup="true" aria-expanded="false">😀 React</button>
         <div id="react-menu" class="react-menu" role="menu" hidden></div>
+      </div>
+    </div>
+    <!-- streamer controls: shown here while sharing -->
+    <div id="share-tools" class="tools" hidden>
+      <span class="live-pill">LIVE</span>
+      <button id="change-source" class="tool source-btn" title="Change what you're sharing">🖥️ <span id="source-name" class="source-name"></span> <span class="caret">▾</span></button>
+      <span class="sep"></span>
+      <button id="return-game" class="tool" title="Hide this window and go back to your game">🎮 Return to game</button>
+      <button id="test-draw" class="tool" title="Draws a sample mark on your screen so you can check it shows up on top of your game">✏️ Test drawing</button>
+      <div id="invite-wrap" class="pop-wrap">
+        <button id="invite-btn" class="tool" aria-haspopup="true" aria-expanded="false" title="Invite someone">🔗 Invite</button>
+        <div id="invite-menu" class="popover invite-menu">
+          <div class="pop-title">Invite</div>
+          <div id="code-mini" class="code otp-display"></div>
+          <div class="pop-actions">
+            <button id="copy-invite-2" class="primary small">Copy invite link</button>
+            <button id="copy-code-2" class="ghost small">Copy code</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -55,6 +79,82 @@
           <button id="conn-restart" class="ghost small" title="Fresh capture + fresh video connection">🔄 Restart stream</button>
           <button id="conn-details" class="link">Troubleshooting details</button>
         </div>
+      </div>
+    </div>
+    <div id="stream-set" class="pop-wrap" hidden>
+      <button id="stream-set-btn" class="icon-btn" aria-haspopup="true" aria-expanded="false" title="Stream settings">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2.2" fill="#161a22"/><circle cx="15" cy="12" r="2.2" fill="#161a22"/><circle cx="8" cy="18" r="2.2" fill="#161a22"/></svg>
+      </button>
+      <div id="stream-set-menu" class="popover stream-menu">
+        <div class="pop-title">Stream settings</div>
+        <p id="track-note" class="note track-note"></p>
+      <div class="set-block">
+        <p class="set-title">Video quality <span class="note">(applies right away)</span></p>
+      <div class="q-grid">
+        <label>Resolution
+          <select id="q-res">
+            <option value="native">Native (up to 4K)</option>
+            <option value="1440">1440p</option>
+            <option value="1080">1080p</option>
+            <option value="900">900p</option>
+            <option value="720">720p</option>
+          </select>
+        </label>
+        <label>Frame rate
+          <select id="q-fps">
+            <option value="60">60 fps</option>
+            <option value="30">30 fps</option>
+            <option value="15">15 fps</option>
+          </select>
+        </label>
+      </div>
+      <details class="more-quality">
+        <summary>More options</summary>
+        <div class="q-grid">
+        <label>Max quality (bitrate)
+          <select id="q-mbps">
+            <option value="4">Low (slow internet)</option>
+            <option value="8">Medium</option>
+            <option value="12">High (recommended)</option>
+            <option value="20">Very high</option>
+            <option value="30">Max (same Wi-Fi / wired)</option>
+          </select>
+        </label>
+        <label>When the network struggles
+          <select id="q-prefer">
+            <option value="balanced">Balanced (recommended)</option>
+            <option value="sharp">Keep it sharp</option>
+            <option value="smooth">Keep it smooth</option>
+          </select>
+        </label>
+        <label>Video format
+          <select id="q-codec">
+            <option value="h264">Fast (H.264, recommended)</option>
+            <option value="vp9">Sharper text (VP9, more CPU)</option>
+            <option value="vp8">Most compatible (VP8)</option>
+            <option value="auto">Automatic</option>
+          </select>
+        </label>
+        </div>
+        <p id="q-stats" class="q-stats"></p>
+        <p id="q-pipe" class="q-stats q-pipe"></p>
+      </details>
+      </div>
+      <div class="set-block">
+        <label class="check-row"><input id="sound" type="checkbox" checked> Play a sound when your friend draws</label>
+      </div>
+      <div class="set-block hotkeys">
+        <p class="hotkeys-title">In-game hotkeys</p>
+        <ul class="hotkey-list">
+          <li><span><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></span> Erase marks</li>
+          <li><span><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd></span> Hide / show marks</li>
+          <li><span><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd></span> Sound on / off</li>
+        </ul>
+      </div>
+      <div class="set-block">
+        <p class="note">Drawings appear over fullscreen games and fade after a few seconds; your mouse and keyboard still go to the game. If a game hides them, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b>. You'll still hear the sound cue either way.</p>
+        <button id="restart-stream" class="ghost small" title="Fresh capture + fresh video connection. Your friend stays connected.">🔄 Restart stream</button>
+      </div>
       </div>
     </div>
     <button id="end" class="danger small" hidden>End session</button>
@@ -118,96 +218,36 @@
     </div>
   </section>
 
-  <!-- 3b. sharing -->
-  <section id="step-share" class="step" hidden>
-    <p class="eyebrow">Sharing your screen</p>
-    <h1 id="share-title">Send this code to your friend</h1>
-    <div class="source-row">
-      <span id="source-name" class="source-name"></span>
-      <button id="change-source" class="ghost small">Change source</button>
-      <button id="restart-stream" class="ghost small" title="Fresh capture + fresh video connection. Your friend stays connected.">🔄 Restart stream</button>
-    </div>
-    <p id="track-note" class="note track-note"></p>
-    <div class="code-box">
-      <div id="code" class="code">······</div>
-      <div class="code-actions">
-        <button id="copy-invite" class="primary" title="Copies a message with a link. Paste it in Discord, a text, anywhere.">Copy invite link</button>
-        <button id="copy-code" class="ghost small">Copy code only</button>
+  <!-- 3b. sharing: the shared source fills the window, controls are in the header -->
+  <section id="step-share" class="watch share-view waiting" hidden>
+    <div id="share-stage" class="stage">
+      <video id="preview-video" muted playsinline></video>
+      <canvas id="preview-draw"></canvas>
+      <div id="preview-paused" class="preview-paused" hidden>Preview paused while you play</div>
+      <div class="stage-notes">
+        <p id="overlay-hidden" class="stage-note warn" hidden>Drawings are hidden. Press <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> to show them again.</p>
+        <p id="q-hint" class="stage-note warn"></p>
+        <p id="share-status" class="stage-note status">Starting…</p>
+      </div>
+      <!-- before anyone joins -->
+      <div class="invite-card">
+        <h1 id="share-title">Invite your friend</h1>
+        <button id="copy-invite" class="primary hero-btn" title="Copies a message with a link. Paste it in Discord, a text, anywhere.">Copy invite link</button>
+        <p class="code-line">Code <span id="code" class="code"></span> <button id="copy-code" class="link">Copy code</button></p>
       </div>
     </div>
-    <p id="share-status" class="status">Starting…</p>
-    <div class="row gap">
-      <button id="return-game" class="ghost">Return to game</button>
-      <button id="test-draw" class="ghost" title="Draws a sample mark on your screen so you can check it shows up on top of your game">✏️ Test drawing</button>
-    </div>
-    <div class="quality">
-      <p class="hotkeys-title">Video quality <span class="note">(changes apply right away)</span></p>
-      <div class="q-grid">
-        <label>Resolution
-          <select id="q-res">
-            <option value="native">Native (up to 4K)</option>
-            <option value="1440">1440p</option>
-            <option value="1080">1080p</option>
-            <option value="900">900p</option>
-            <option value="720">720p</option>
-          </select>
-        </label>
-        <label>Frame rate
-          <select id="q-fps">
-            <option value="60">60 fps</option>
-            <option value="30">30 fps</option>
-            <option value="15">15 fps</option>
-          </select>
-        </label>
-      </div>
-      <details class="more-quality">
-        <summary>More options</summary>
-        <div class="q-grid">
-        <label>Max quality (bitrate)
-          <select id="q-mbps">
-            <option value="4">Low (slow internet)</option>
-            <option value="8">Medium</option>
-            <option value="12">High (recommended)</option>
-            <option value="20">Very high</option>
-            <option value="30">Max (same Wi-Fi / wired)</option>
-          </select>
-        </label>
-        <label>When the network struggles
-          <select id="q-prefer">
-            <option value="balanced">Balanced (recommended)</option>
-            <option value="sharp">Keep it sharp</option>
-            <option value="smooth">Keep it smooth</option>
-          </select>
-        </label>
-        <label>Video format
-          <select id="q-codec">
-            <option value="h264">Fast (H.264, recommended)</option>
-            <option value="vp9">Sharper text (VP9, more CPU)</option>
-            <option value="vp8">Most compatible (VP8)</option>
-            <option value="auto">Automatic</option>
-          </select>
-        </label>
-        </div>
-        <p id="q-stats" class="q-stats"></p>
-        <p id="q-pipe" class="q-stats q-pipe"></p>
-      </details>
-      <p id="q-hint" class="warn-inline"></p>
-    </div>
-    <label class="check-row"><input id="sound" type="checkbox" checked> Play a sound when your friend draws</label>
-    <p id="overlay-hidden" class="warn-inline" hidden>Drawings are hidden. Press <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> to show them again.</p>
-    <div class="hotkeys">
-      <p class="hotkeys-title">In-game hotkeys</p>
-      <p><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd> clear marks · <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> hide/show marks · <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> sound on/off</p>
-    </div>
-    <p class="note small-note">Keep <span data-brand></span> open while you play. Drawings appear over fullscreen games and fade after a few seconds; your mouse and keyboard still go to the game. If a game hides the drawings, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b> in its video settings. You'll still hear the sound cue either way.</p>
+    <div id="preview" hidden></div>
   </section>
 
   <!-- 3c. join -->
   <section id="step-join" class="step" hidden>
     <p class="eyebrow">Join a friend</p>
     <h1>Enter your friend's code</h1>
-    <form id="join-form" class="row">
-      <input id="join-code" type="text" maxlength="12" placeholder="ABC123" autocomplete="off" spellcheck="false" class="code-input" required>
+    <form id="join-form" class="row join-form">
+      <div class="otp" id="join-otp">
+        <input id="join-code" type="text" maxlength="400" autocomplete="off" spellcheck="false" class="otp-input" aria-label="6-character code" required>
+        <div class="otp-cells" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
       <button id="join-btn" class="primary" type="submit">Join →</button>
     </form>
     <p id="join-status" class="status"></p>

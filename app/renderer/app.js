@@ -61,10 +61,13 @@
     for (const s of STEPS) $(s).hidden = s !== id;
     $('end').hidden = !['step-share', 'step-watch'].includes(id) && !(id === 'step-join' && !S.ended);
     $('tools').hidden = id !== 'step-watch';
-    document.body.classList.toggle('watching', id === 'step-watch');
+    $('share-tools').hidden = id !== 'step-share';
+    $('stream-set').hidden = id !== 'step-share';
+    document.body.classList.toggle('watching', id === 'step-watch' || id === 'step-share');
     if (id !== 'step-watch' && $('react-menu')) $('react-menu').hidden = true;
     renderChips();
     updateConn();
+    if (S.previewReady) updatePreview();
   }
   // Who's here: overlapping avatars; hover or click shows a list with names,
   // who is streaming/watching, and which one is you.
@@ -77,6 +80,7 @@
     if (S.name) people.push({ name: S.name, avatar: S.avatar, you: true, role: S.role === 'share' ? 'Streaming' : S.role === 'join' ? 'Watching' : '' });
     if (S.peerProfile) people.push({ name: S.peerProfile.name, avatar: S.peerProfile.avatar, you: false, role: S.role === 'share' ? 'Watching' : 'Streaming' });
     $('people').hidden = !people.length;
+    if (S.role === 'share') renderLiveCard();
     // In the stack you are always in front (leftmost, on top); others behind.
     people.forEach((p, i, arr) => {
       const av = window.Profile.render(p.avatar, p.name, 28);
@@ -115,6 +119,48 @@
       menu.appendChild(row);
     }
   }
+  // The 6-character code, one box per character (blank boxes while waiting).
+  function setCodeBoxes(code) {
+    const chars = String(code || '').split('');
+    for (const el of [$('code'), $('code-mini')]) {
+      el.innerHTML = '';
+      el.classList.add('otp-display');
+      for (let i = 0; i < 6; i++) {
+        const c = document.createElement('span');
+        c.className = chars[i] ? 'otp-cell' : 'otp-cell empty';
+        c.textContent = chars[i] || '·';
+        el.appendChild(c);
+      }
+    }
+  }
+
+  // Sharing screen has two states: waiting (one big invite action) and live
+  // (compact card with who's watching).
+  function setShareLive(live) {
+    const el = $('step-share');
+    el.classList.toggle('live', !!live);
+    el.classList.toggle('waiting', !live);
+    document.body.classList.toggle('share-live', !!live);
+    renderLiveCard();
+  }
+  function renderLiveCard() {
+    const box = $('live-who');
+    if (!box) return;
+    box.innerHTML = '';
+    const name = (S.peerProfile && S.peerProfile.name) || S.friend || 'Your friend';
+    box.appendChild(window.Profile.render(S.peerProfile && S.peerProfile.avatar, name, 44));
+    const t = document.createElement('div');
+    const n = document.createElement('div');
+    n.className = 'live-name';
+    n.textContent = `${name} is watching`;
+    const sub = document.createElement('div');
+    sub.className = 'live-sub';
+    sub.textContent = 'They can draw and react on top of your game.';
+    t.appendChild(n);
+    t.appendChild(sub);
+    box.appendChild(t);
+  }
+
   // pv = profile version; changes whenever my name/avatar changes, so the
   // other side can tell (from heartbeats) that its copy is out of date.
   function myProfileMsg() { return { t: 'hello', name: S.name, avatar: S.avatar, pv: S.profileVer }; }
@@ -819,7 +865,7 @@
   }
 
   function showSourceName(source) {
-    $('source-name').textContent = source.kind === 'window' ? `Sharing: ${source.name}` : `Sharing: ${source.name}`;
+    $('source-name').textContent = `Sharing ${source.name}`;
   }
 
   async function startSharing(source, opts) {
@@ -828,9 +874,10 @@
     S.role = 'share';
     S.source = source;
     show('step-share');
-    $('code').textContent = '······';
+    setCodeBoxes('');
     $('copy-code').disabled = true; $('copy-invite').disabled = true;
-    $('share-title').textContent = 'Send this code to your friend';
+    $('share-title').textContent = 'Invite your friend';
+    setShareLive(false);
     setStatus($('share-status'), 'Starting capture…', 'busy');
     try {
       const c = await captureSource(source);
@@ -926,7 +973,7 @@
       if (S.conn && S.conn.open) setStatus($('share-status'), `Connected. ${S.friend || 'Your friend'} can see your game and draw on it.`, 'good');
       return;
     }
-    bridge.draw({ t: 'clear' });
+    drawLocal({ t: 'clear' });
     if (S.conn && S.conn.open) S.conn.send({ t: 'source', name: source.name });
     setStatus($('share-status'), S.conn && S.conn.open ? `Now sharing "${source.name}". ${S.friend || 'Your friend'} sees it.` : `Now sharing "${source.name}".`, 'good');
   }
@@ -961,7 +1008,7 @@
       if (registered) return;
       registered = true;
       log('host peer registered');
-      $('code').textContent = S.code;
+      setCodeBoxes(S.code);
       $('copy-code').disabled = false; $('copy-invite').disabled = false;
       setStatus($('share-status'), 'Waiting for your friend to enter the code…', 'busy');
     });
@@ -990,7 +1037,7 @@
       }
       if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) {
         if (!S.conn) {
-          $('code').textContent = '······';
+          setCodeBoxes('');
           $('copy-code').disabled = true; $('copy-invite').disabled = true;
         }
         setStatus($('share-status'), `${friendlyPeerError(err)} Retrying…`, 'bad');
@@ -1092,7 +1139,7 @@
   // Player: apply each numbered mark message once, in order, whichever path
   // it came on. A gap (message lost with a dying path) is skipped after 300 ms.
   function receiveDraw(m) {
-    if (typeof m.q !== 'number' || !m.s) { bridge.draw(m); return; } // older friend
+    if (typeof m.q !== 'number' || !m.s) { drawLocal(m); return; } // older friend
     let R = S.rx;
     if (!R || R.s !== m.s) R = S.rx = { s: m.s, next: m.q, buf: new Map(), timer: null };
     if (m.q < R.next || R.buf.has(m.q)) return; // already have it
@@ -1105,7 +1152,7 @@
       R.buf.delete(R.next);
       R.next++;
       const { s, q, ...plain } = m;
-      bridge.draw(plain);
+      drawLocal(plain);
     }
     clearTimeout(R.timer);
     R.timer = null;
@@ -1168,6 +1215,7 @@
       S.netCapMbps = null;
       const call = startVideoCall(conn);
       $('share-title').textContent = `${viewerName} is watching`;
+      setShareLive(true);
       setStatus($('share-status'), `Connected. ${viewerName} can see your screen and draw on it.`, 'good');
       later(4000, async () => {
         const r = await describeRoute(call.peerConnection);
@@ -1257,7 +1305,7 @@
     S.peerHb = false;
     S.peerProfile = null;
     renderChips();
-    bridge.draw({ t: 'clear' });
+    drawLocal({ t: 'clear' });
     try { S.call && S.call.close(); } catch { /* ignore */ }
     S.call = null;
     S.conn = null;
@@ -1265,7 +1313,8 @@
     $('q-stats').textContent = '';
     $('q-hint').textContent = '';
     if (S.ended) return;
-    $('share-title').textContent = 'Send this code to your friend';
+    $('share-title').textContent = 'Invite your friend';
+    setShareLive(false);
     if (S.peerUpdating) {
       setStatus($('share-status'), `${S.friend || 'Your friend'} is updating and will reconnect by themselves…`, 'busy');
       S.peerUpdating = false;
@@ -1670,6 +1719,75 @@
   }
   const localMarks = new window.Marks(canvas, contentRect);
 
+  // ---------- streamer preview ----------
+  // The player sees their stream like the friend does, marks included. To save
+  // resources it pauses whenever this app is not in front (playing the game,
+  // minimized, another app focused) and picks up again when they come back.
+  const pVideo = $('preview-video');
+  const pCanvas = $('preview-draw');
+  function fitRect(v, c) {
+    return () => {
+      const cw = c.clientWidth; const ch = c.clientHeight;
+      const vw = v.videoWidth || 16; const vh = v.videoHeight || 9;
+      const k = Math.min(cw / vw, ch / vh);
+      return { x: (cw - vw * k) / 2, y: (ch - vh * k) / 2, w: vw * k, h: vh * k };
+    };
+  }
+  const previewMarks = new window.Marks(pCanvas, fitRect(pVideo, pCanvas));
+  function drawLocal(m) {
+    bridge.draw(m);
+    if (S.role === 'share') previewMarks.apply(m);
+  }
+  function previewWanted() {
+    return S.role === 'share' && !S.ended && !$('step-share').hidden && !!S.stream
+      && document.visibilityState === 'visible' && document.hasFocus();
+  }
+  function updatePreview() {
+    const has = S.role === 'share' && !S.ended && !!S.stream;
+    if (!has) { if (pVideo.srcObject) pVideo.srcObject = null; $('preview-paused').hidden = true; return; }
+    if (previewWanted()) {
+      if (pVideo.srcObject !== S.stream) pVideo.srcObject = S.stream;
+      if (pVideo.paused) pVideo.play().catch(() => {});
+      $('preview-paused').hidden = true;
+    } else {
+      if (!pVideo.paused) pVideo.pause();
+      $('preview-paused').hidden = false;
+    }
+  }
+  window.addEventListener('focus', updatePreview);
+  window.addEventListener('blur', updatePreview);
+  document.addEventListener('visibilitychange', updatePreview);
+  setInterval(updatePreview, 1000); // picks up a new capture after Change source / Restart stream
+  S.previewReady = true;
+
+  // ---------- join code: six boxes over one real input ----------
+  // Paste works (a whole invite message too: the 6-character code is pulled out).
+  function cleanJoinCode(raw) {
+    const text = String(raw || '');
+    if (!/[^A-Za-z0-9]/.test(text)) return normalizeCode(text).slice(0, 6); // typed or plain code
+    // A pasted invite: code= in the link, then join/XXXXXX, then "code XXXXXX",
+    // then the last 6-character word as a fallback.
+    const tries = [/code=([A-Za-z0-9]{6})(?![A-Za-z0-9])/i, /join\/([A-Za-z0-9]{6})(?![A-Za-z0-9])/i, /code\s+([A-Za-z0-9]{6})(?![A-Za-z0-9])/i];
+    for (const re of tries) { const m = text.match(re); if (m) return m[1].toUpperCase(); }
+    const words = text.toUpperCase().match(/(?:^|[^A-Z0-9])[A-Z0-9]{6}(?=$|[^A-Z0-9])/g);
+    if (words && words.length) return words[words.length - 1].replace(/[^A-Z0-9]/g, '');
+    return normalizeCode(text).slice(0, 6);
+  }
+  function renderJoinCells() {
+    const el = $('join-code');
+    const v = el.value;
+    const cells = document.querySelectorAll('#join-otp .otp-cells span');
+    const focused = document.activeElement === el;
+    cells.forEach((c, i) => {
+      c.textContent = v[i] || '';
+      c.classList.toggle('filled', !!v[i]);
+      c.classList.toggle('active', focused && i === Math.min(v.length, 5));
+    });
+  }
+  $('join-code').addEventListener('focus', renderJoinCells);
+  $('join-code').addEventListener('blur', renderJoinCells);
+  setInterval(() => { if (!$('step-join').hidden) renderJoinCells(); }, 200); // value set by code (invites, rejoin)
+
   // Count frames actually painted on the friend's screen.
   S.framesShown = 0;
   if (video.requestVideoFrameCallback) {
@@ -1728,8 +1846,15 @@
     drawState.color = color;
     store.set('app.color', color);
     document.querySelectorAll('.swatch[data-color]').forEach((x) => x.classList.toggle('active', x.dataset.color.toLowerCase() === color));
+    $('color-current').style.setProperty('--c', color);
+    const name = document.querySelector(`.swatch[data-color="${color}"]`);
+    $('color-btn').title = `Color: ${name ? name.title : color} (click for more)`;
   }
-  document.querySelectorAll('.swatch[data-color]').forEach((b) => b.addEventListener('click', () => setColor(b.dataset.color)));
+  document.querySelectorAll('.swatch[data-color]').forEach((b) => b.addEventListener('click', () => {
+    setColor(b.dataset.color);
+    $('color-menu').classList.remove('open');
+    $('color-btn').setAttribute('aria-expanded', 'false');
+  }));
   setColor(drawState.color);
   $('clear').addEventListener('click', () => send({ t: 'clear' }));
   $('refresh-video').addEventListener('click', () => {
@@ -1802,6 +1927,9 @@
   const menus = [
     { btn: 'people-btn', menu: 'people-menu' },
     { btn: 'conn-btn', menu: 'conn-menu', onOpen: fillConnMenu },
+    { btn: 'invite-btn', menu: 'invite-menu' },
+    { btn: 'stream-set-btn', menu: 'stream-set-menu' },
+    { btn: 'color-btn', menu: 'color-menu' },
   ];
   function closeMenus(except) {
     for (const m of menus) {
@@ -1888,7 +2016,20 @@
     if (!S.code) return;
     await bridge.copy(S.code);
     $('copy-code').textContent = 'Copied ✓';
-    setTimeout(() => { $('copy-code').textContent = 'Copy code only'; }, 1500);
+    setTimeout(() => { $('copy-code').textContent = 'Copy code'; }, 1500);
+  });
+  $('copy-invite-2').addEventListener('click', async () => {
+    if (!S.code) return;
+    await bridge.copy(inviteText(S.code));
+    log('invite copied');
+    $('copy-invite-2').textContent = 'Copied ✓';
+    setTimeout(() => { $('copy-invite-2').textContent = 'Copy invite link'; }, 1500);
+  });
+  $('copy-code-2').addEventListener('click', async () => {
+    if (!S.code) return;
+    await bridge.copy(S.code);
+    $('copy-code-2').textContent = 'Copied ✓';
+    setTimeout(() => { $('copy-code-2').textContent = 'Copy code'; }, 1500);
   });
   $('return-game').addEventListener('click', () => bridge.minimize());
   $('change-source').addEventListener('click', openSourceDialog);
@@ -1903,11 +2044,11 @@
       const a = (i / 40) * Math.PI * 2;
       pts.push([0.5 + Math.cos(a) * 0.16 * aspect, 0.5 + Math.sin(a) * 0.16]);
     }
-    bridge.draw({ t: 'start', id, x: pts[0][0], y: pts[0][1], c: color, h: markSeconds() });
-    pts.slice(1).forEach((p, i) => setTimeout(() => bridge.draw({ t: 'move', id, x: p[0], y: p[1] }), 12 * (i + 1)));
+    drawLocal({ t: 'start', id, x: pts[0][0], y: pts[0][1], c: color, h: markSeconds() });
+    pts.slice(1).forEach((p, i) => setTimeout(() => drawLocal({ t: 'move', id, x: p[0], y: p[1] }), 12 * (i + 1)));
     setTimeout(() => {
-      bridge.draw({ t: 'end', id });
-      bridge.draw({ t: 'ping', x: 0.5, y: 0.5, c: color });
+      drawLocal({ t: 'end', id });
+      drawLocal({ t: 'ping', x: 0.5, y: 0.5, c: color });
     }, 12 * pts.length + 20);
     if (bridge.overlayToast) bridge.overlayToast('Test: this is how your friend\'s marks look');
     log('test drawing sent to overlay');
@@ -1983,8 +2124,9 @@
   $('join-form').addEventListener('submit', (ev) => { ev.preventDefault(); joinFriend($('join-code').value); });
   $('join-code').addEventListener('input', () => {
     const el = $('join-code');
-    const v = normalizeCode(el.value);
+    const v = cleanJoinCode(el.value);
     if (el.value !== v) el.value = v;
+    renderJoinCells();
   });
   $('join-back').addEventListener('click', () => { teardown(); show('step-role'); });
   $('end').addEventListener('click', () => endSession(''));

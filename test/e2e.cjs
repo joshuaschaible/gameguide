@@ -74,6 +74,7 @@ const stub = (name) => `
   await player.click('.source');
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code = await player.textContent('#code');
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-waiting.png' });
   console.log('code', code);
   await player.click('#copy-code');
   console.log('copied', await player.evaluate(() => window.__copied));
@@ -109,6 +110,33 @@ const stub = (name) => `
   console.log('signal level (friend, player):', await friend.evaluate(() => window.__app.sigLevel), await player.evaluate(() => window.__app.sigLevel));
   await friend.keyboard.press('Escape');
   await player.screenshot({ path: '/tmp/claude-0/ui-share.png' });
+  // streamer preview: plays while the app is in front, pauses in the background
+  const pv = () => player.evaluate(() => { const v = document.getElementById('preview-video'); return { shown: !document.getElementById('preview').hidden, playing: !v.paused && !!v.srcObject, w: v.videoWidth, pausedLabel: !document.getElementById('preview-paused').hidden }; });
+  await player.evaluate(() => { document.hasFocus = () => true; window.dispatchEvent(new Event('focus')); });
+  await player.waitForTimeout(600);
+  console.log('preview in front:', JSON.stringify(await pv()));
+  await player.evaluate(() => { document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
+  await player.waitForTimeout(300);
+  console.log('preview in background:', JSON.stringify(await pv()));
+  await player.evaluate(() => { document.hasFocus = () => true; window.dispatchEvent(new Event('focus')); });
+  await player.waitForTimeout(400);
+  console.log('preview back in front:', JSON.stringify(await pv()));
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-preview.png' });
+  await player.click('#stream-set-btn');
+  await player.waitForTimeout(200);
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png' });
+  await player.keyboard.press('Escape');
+  await player.click('#invite-btn');
+  await player.waitForTimeout(200);
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-invite.png', clip: { x: 0, y: 0, width: 700, height: 260 } });
+  await player.keyboard.press('Escape');
+  await friend.click('#color-btn');
+  await friend.waitForTimeout(200);
+  await friend.screenshot({ path: '/tmp/claude-0/ui-colors.png', clip: { x: 0, y: 0, width: 600, height: 200 } });
+  await friend.click('#color-menu .swatch[data-color="#3bf0ff"]');
+  console.log('color pick:', await friend.evaluate(() => [window.__app && document.getElementById('color-menu').classList.contains('open'), getComputedStyle(document.getElementById('color-current')).backgroundColor]));
+  await friend.click('#color-btn');
+  await friend.click('#color-menu .swatch[data-color="#ff3b6b"]');
 
   // draw a stroke + ping + clear
   const box = await friend.locator('#draw').boundingBox();
@@ -155,6 +183,7 @@ const stub = (name) => `
   console.log('watch status:', await friend.textContent('#watch-status'), 'friend=', await friend.evaluate(() => window.__app.friend), 'log hello?', await friend.evaluate(() => window.__app.log.filter((l) => /hello|said/.test(l)).join(' | ')));
   console.log('player stats:', await player.textContent('#q-stats'), '|', await player.textContent('#q-hint'));
   // live change: 720p / 30fps / vp9 setting
+  await player.evaluate(() => { document.getElementById('stream-set-menu').classList.add('open'); document.querySelector('.more-quality').open = true; });
   await player.selectOption('#q-res', '720');
   await player.selectOption('#q-fps', '30');
   await player.waitForTimeout(4500);
@@ -307,6 +336,7 @@ const stub = (name) => `
     '| mark arrived:', (await starts()) > before,
     '| friend still watching:', await friend.evaluate(() => !document.getElementById('step-watch').hidden));
   await player.waitForTimeout(3000);
+  await player.click('#stream-set-btn');
   await player.click('#restart-stream');
   await player.waitForTimeout(5000);
   console.log('player restart-stream:', await player.textContent('#share-status'), '| friend:', await friend.textContent('#watch-status'));
@@ -354,7 +384,9 @@ const stub = (name) => `
   await player.click('.source');
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code2 = await player.textContent('#code');
-  await friend.fill('#join-code', code2);
+  await friend.fill('#join-code', `Join my session: https://x.github.io/gameguide/join/?code=${code2.toLowerCase()} or type ${code2}`);
+  console.log('otp paste ->', await friend.inputValue('#join-code'), JSON.stringify(await friend.evaluate(() => [...document.querySelectorAll('#join-otp .otp-cells span')].map((c) => c.textContent).join(''))));
+  await friend.screenshot({ path: '/tmp/claude-0/ui-join-otp.png' });
   await friend.click('#join-btn');
   await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0, null, { timeout: 30000 });
   console.log('rejoin OK with', code2);
