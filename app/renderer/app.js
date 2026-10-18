@@ -30,6 +30,30 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
   };
 
+  // ---------- icons (sprite in index.html) ----------
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function icon(name) {
+    const svg = document.createElementNS(SVGNS, 'svg');
+    svg.setAttribute('class', 'ic');
+    svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS(SVGNS, 'use');
+    use.setAttribute('href', `#i-${name}`);
+    svg.appendChild(use);
+    return svg;
+  }
+  function iconText(el, name, text, after) {
+    el.replaceChildren();
+    if (after) el.append(document.createTextNode(text), icon(name));
+    else el.append(icon(name), document.createTextNode(text));
+  }
+  // Briefly shows "✓ Copied" on a button, then puts its label back.
+  function flashCopied(btn, text, ms) {
+    if (!btn.dataset.label) btn.dataset.label = btn.innerHTML;
+    iconText(btn, 'check', text || 'Copied');
+    clearTimeout(btn._flash);
+    btn._flash = setTimeout(() => { btn.innerHTML = btn.dataset.label; delete btn.dataset.label; }, ms || 1500);
+  }
+
   // ---------- state ----------
   const S = {
     name: store.get('app.name', ''),
@@ -815,7 +839,7 @@
         if (src.likelyGame) {
           const tag = document.createElement('span');
           tag.className = 'likely';
-          tag.textContent = '★ Looks like your game';
+          iconText(tag, 'star', 'Looks like your game');
           b.appendChild(tag);
         }
         const img = document.createElement('img');
@@ -1708,15 +1732,15 @@
   function showReceipt(state) {
     const who = S.friend || 'your friend';
     const text = {
-      shown: `✓ Shown on ${who}'s screen`,
-      hidden: `⚠ Not shown: ${who} hid drawings (Ctrl/Cmd+Shift+H)`,
-      minimized: `⚠ Not shown: ${who}'s game is minimized`,
-      closed: `⚠ Not shown: ${who}'s shared window closed`,
-      'not-visible': `⚠ Couldn't show it on ${who}'s screen`,
+      shown: `Shown on ${who}'s screen`,
+      hidden: `Not shown: ${who} hid drawings (Ctrl/Cmd+Shift+H)`,
+      minimized: `Not shown: ${who}'s game is minimized`,
+      closed: `Not shown: ${who}'s shared window closed`,
+      'not-visible': `Couldn't show it on ${who}'s screen`,
     }[state] || '';
     if (!text) return;
     const el = $('receipt');
-    el.textContent = text;
+    iconText(el, state === 'shown' ? 'check' : 'alert', text);
     el.className = `receipt ${state === 'shown' ? 'ok' : 'bad'}`;
     el.hidden = false;
     clearTimeout(receiptTimer);
@@ -2036,27 +2060,23 @@
     if (!S.code) return;
     await bridge.copy(inviteText(S.code));
     log('invite copied');
-    $('copy-invite').textContent = 'Copied! Paste it in Discord';
-    setTimeout(() => { $('copy-invite').textContent = 'Copy invite link'; }, 1800);
+    flashCopied($('copy-invite'), 'Copied! Paste it in Discord', 1800);
   });
   $('copy-code').addEventListener('click', async () => {
     if (!S.code) return;
     await bridge.copy(S.code);
-    $('copy-code').textContent = 'Copied ✓';
-    setTimeout(() => { $('copy-code').textContent = 'Copy code'; }, 1500);
+    flashCopied($('copy-code'));
   });
   $('copy-invite-2').addEventListener('click', async () => {
     if (!S.code) return;
     await bridge.copy(inviteText(S.code));
     log('invite copied');
-    $('copy-invite-2').textContent = 'Copied ✓';
-    setTimeout(() => { $('copy-invite-2').textContent = 'Copy invite link'; }, 1500);
+    flashCopied($('copy-invite-2'));
   });
   $('copy-code-2').addEventListener('click', async () => {
     if (!S.code) return;
     await bridge.copy(S.code);
-    $('copy-code-2').textContent = 'Copied ✓';
-    setTimeout(() => { $('copy-code-2').textContent = 'Copy code'; }, 1500);
+    flashCopied($('copy-code-2'));
   });
   $('change-source').addEventListener('click', openSourceDialog);
 
@@ -2086,7 +2106,8 @@
     slide = n;
     document.querySelectorAll('#welcome .slide').forEach((el) => { el.hidden = Number(el.dataset.slide) !== n; });
     document.querySelectorAll('#welcome .dot').forEach((d, i) => d.classList.toggle('on', i === n));
-    $('welcome-next').textContent = n === 2 ? "Let's go" : 'Next →';
+    if (n === 2) $('welcome-next').textContent = "Let's go";
+    else iconText($('welcome-next'), 'arrow-right', 'Next', true);
   }
   function openWelcome() { showSlide(0); if (!$('welcome').open) $('welcome').showModal(); }
   function closeWelcome() { store.set('app.onboarded', true); $('welcome').close(); }
@@ -2182,11 +2203,10 @@
   });
   $('copy-details').addEventListener('click', async () => {
     await bridge.copy(await buildDetails());
-    $('copy-details').textContent = 'Copied ✓';
-    setTimeout(() => { $('copy-details').textContent = 'Copy details'; }, 1500);
+    flashCopied($('copy-details'));
   });
   $('details-close').addEventListener('click', () => $('details').close());
-  $('details-copy').addEventListener('click', () => bridge.copy($('details-text').textContent));
+  $('details-copy').addEventListener('click', async () => { await bridge.copy($('details-text').textContent); flashCopied($('details-copy')); });
 
   // settings
   $('open-settings').addEventListener('click', () => {

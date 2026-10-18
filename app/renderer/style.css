@@ -426,3 +426,20 @@ kbd { background: var(--bg-3); border-radius: 4px; padding: 1px 6px; box-shadow:
 .live-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .set-block > .set-title { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--text-strong); }
 .set-title .note { font-weight: 400; font-size: 12px; text-transform: none; }
+
+/* ---------- icons (Lucide-style line set, sprite in index.html) ---------- */
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+.small .ic, .link .ic { width: 16px; height: 16px; }
+.tool .ic { width: 18px; height: 18px; }
+.source-btn .caret { display: inline-flex; color: var(--muted); }
+.source-btn .caret .ic { width: 14px; height: 14px; }
+.likely { display: inline-flex; align-items: center; gap: 4px; }
+.likely .ic { width: 12px; height: 12px; fill: currentColor; stroke-width: 1.5; }
+.receipt { display: inline-flex; align-items: center; gap: 6px; }
+.receipt .ic { width: 15px; height: 15px; }
+.card .card-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 0; }
+.card .card-icon .ic { width: 24px; height: 24px; }
+.slide-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); font-size: 0; margin-bottom: 14px; }
+.slide-icon .ic { width: 28px; height: 28px; }
+:root[data-theme="dark"] .card .card-icon, :root[data-theme="dark"] .slide-icon { color: #949cf7; }
