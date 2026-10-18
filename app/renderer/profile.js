@@ -129,7 +129,7 @@
       else {
         const slot = document.createElement('span');
         slot.className = 'upload-slot';
-        slot.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.2-1.8A1 1 0 0 1 9.5 5h5a1 1 0 0 1 .8.4L16.5 7h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>';
+        slot.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-camera"/></svg>';
         photoBtn.appendChild(slot);
       }
     };
