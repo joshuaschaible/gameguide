@@ -110,6 +110,18 @@ const stub = (name) => `
   console.log('signal level (friend, player):', await friend.evaluate(() => window.__app.sigLevel), await player.evaluate(() => window.__app.sigLevel));
   await friend.keyboard.press('Escape');
   await player.screenshot({ path: '/tmp/claude-0/ui-share.png' });
+  // streamer preview: plays while the app is in front, pauses in the background
+  const pv = () => player.evaluate(() => { const v = document.getElementById('preview-video'); return { shown: !document.getElementById('preview').hidden, playing: !v.paused && !!v.srcObject, w: v.videoWidth, pausedLabel: !document.getElementById('preview-paused').hidden }; });
+  await player.evaluate(() => { document.hasFocus = () => true; window.dispatchEvent(new Event('focus')); });
+  await player.waitForTimeout(600);
+  console.log('preview in front:', JSON.stringify(await pv()));
+  await player.evaluate(() => { document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
+  await player.waitForTimeout(300);
+  console.log('preview in background:', JSON.stringify(await pv()));
+  await player.evaluate(() => { document.hasFocus = () => true; window.dispatchEvent(new Event('focus')); });
+  await player.waitForTimeout(400);
+  console.log('preview back in front:', JSON.stringify(await pv()));
+  await player.screenshot({ path: '/tmp/claude-0/ui-share-preview.png' });
   await player.click('.stream-settings > summary');
   await player.waitForTimeout(200);
   await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png', fullPage: true });
@@ -360,7 +372,9 @@ const stub = (name) => `
   await player.click('.source');
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code2 = await player.textContent('#code');
-  await friend.fill('#join-code', code2);
+  await friend.fill('#join-code', `Join my session: https://x.github.io/gameguide/join/?code=${code2.toLowerCase()} or type ${code2}`);
+  console.log('otp paste ->', await friend.inputValue('#join-code'), JSON.stringify(await friend.evaluate(() => [...document.querySelectorAll('#join-otp .otp-cells span')].map((c) => c.textContent).join(''))));
+  await friend.screenshot({ path: '/tmp/claude-0/ui-join-otp.png' });
   await friend.click('#join-btn');
   await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0, null, { timeout: 30000 });
   console.log('rejoin OK with', code2);

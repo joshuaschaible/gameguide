@@ -307,3 +307,29 @@ dialog::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb { border-color: va
 .hotkey-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 .hotkey-list li { display: flex; align-items: center; gap: 12px; }
 .hotkey-list li span { min-width: 170px; }
+
+/* ---------- streamer preview ---------- */
+.preview { position: relative; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 4px 0 16px; }
+.preview video, .preview canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.preview video { object-fit: contain; }
+.preview canvas { pointer-events: none; }
+.preview-paused { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); background: rgba(13,15,20,.85); color: var(--muted); font-size: 12px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--line); white-space: nowrap; }
+.share.waiting .preview { margin-bottom: 22px; }
+
+/* ---------- one-time-code look ---------- */
+.otp-display { display: inline-flex; gap: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0; }
+.otp-display .otp-cell { display: inline-grid; place-items: center; width: 34px; height: 42px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); font-size: 20px; font-weight: 800; color: var(--text); }
+.otp-display .otp-cell.empty { color: var(--line); }
+.share.live .otp-display .otp-cell { width: 22px; height: 28px; font-size: 13px; border-radius: 6px; color: var(--muted); }
+.code-line .code.otp-display { font-size: inherit; letter-spacing: 0; }
+
+.join-form { align-items: stretch; }
+.otp { position: relative; flex: 1; min-width: 0; }
+.otp-cells { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; pointer-events: none; }
+.otp-cells span { display: grid; place-items: center; height: 58px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); font: 800 26px ui-monospace, Menlo, Consolas, monospace; color: var(--text); transition: border-color .12s, box-shadow .12s; }
+.otp-cells span.filled { border-color: #3a4260; }
+.otp-cells span.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,92,255,.25); }
+.otp-cells span.active:empty::after { content: ""; width: 2px; height: 26px; background: var(--accent); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.otp-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; font-size: 16px; cursor: text; caret-color: transparent; }
+.join-form #join-btn { padding-left: 22px; padding-right: 22px; }

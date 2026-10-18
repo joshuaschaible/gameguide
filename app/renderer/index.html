@@ -128,6 +128,13 @@
     <h1 id="share-title">Invite your friend</h1>
     <p id="track-note" class="note track-note"></p>
 
+    <!-- what the friend sees (paused while this app is in the background) -->
+    <div id="preview" class="preview" hidden>
+      <video id="preview-video" muted playsinline></video>
+      <canvas id="preview-draw"></canvas>
+      <div id="preview-paused" class="preview-paused" hidden>Preview paused while you play</div>
+    </div>
+
     <!-- shown once a friend is watching -->
     <div class="live-card">
       <div id="live-who" class="live-who"></div>
@@ -223,8 +230,11 @@
   <section id="step-join" class="step" hidden>
     <p class="eyebrow">Join a friend</p>
     <h1>Enter your friend's code</h1>
-    <form id="join-form" class="row">
-      <input id="join-code" type="text" maxlength="12" placeholder="ABC123" autocomplete="off" spellcheck="false" class="code-input" required>
+    <form id="join-form" class="row join-form">
+      <div class="otp" id="join-otp">
+        <input id="join-code" type="text" maxlength="400" autocomplete="off" spellcheck="false" class="otp-input" aria-label="6-character code" required>
+        <div class="otp-cells" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
       <button id="join-btn" class="primary" type="submit">Join →</button>
     </form>
     <p id="join-status" class="status"></p>
