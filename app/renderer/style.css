@@ -463,3 +463,4 @@ body.viewer-mode .top-left { display: contents; }
 body.viewer-mode #viewing { grid-column: 1; justify-self: start; min-width: 0; }
 body.viewer-mode #tools { grid-column: 2; }
 body.viewer-mode .top-right { grid-column: 3; justify-self: end; }
+.set-block .check-row + .check-row { margin-top: 10px; }

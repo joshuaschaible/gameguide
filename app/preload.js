@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('bridge', {
   onOverlayHidden: (fn) => ipcRenderer.on('overlay:hidden', (_e, v) => fn(v)),
   onOverlayTrack: (fn) => ipcRenderer.on('overlay:track', (_e, v) => fn(v)),
   overlayActive: (active) => ipcRenderer.send('overlay:active', !!active),
+  setFocusOnly: (on) => ipcRenderer.send('overlay:focusOnly', !!on),
   onToast: (fn) => ipcRenderer.on('overlay:toast', (_e, t) => fn(t)),
   onOverlayFrame: (fn) => ipcRenderer.on('overlay:frame', (_e, f) => fn(f)),
   // Avatar fallback for pictures the page can't decode (HEIC etc.).

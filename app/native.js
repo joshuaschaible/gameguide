@@ -256,13 +256,15 @@ function loadMac() {
         if (!b || !CGRectMakeWithDictionaryRepresentation(b, r)) return { exists: true, visible: false };
         const on = CFDictionaryGetValue(d, kOnscreen);
         const visible = on ? CFBooleanGetValue(on) : false;
-        let front = frontmostNormalWindow();
+        const raw = frontmostNormalWindow();
+        let front = raw;
         if (ignoreIds && ignoreIds.includes(front)) front = wid; // our own windows don't count
         return {
           exists: true,
           visible,
           foreground: front === wid,
           foregroundId: front,
+          foregroundRaw: raw,
           physical: false,
           rect: { x: r.origin.x, y: r.origin.y, width: r.size.width, height: r.size.height },
         };

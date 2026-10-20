@@ -1754,6 +1754,7 @@
       shown: `Shown on ${who}'s screen`,
       hidden: `Not shown: ${who} hid drawings (Ctrl/Cmd+Shift+H)`,
       minimized: `Not shown: ${who}'s game is minimized`,
+      away: `Not shown: ${who} is in another app right now`,
       closed: `Not shown: ${who}'s shared window closed`,
       'not-visible': `Couldn't show it on ${who}'s screen`,
     }[state] || '';
@@ -2160,6 +2161,14 @@
       if (S.conn && S.conn.open) S.conn.send({ t: 'receipt', state });
     });
   }
+  // Opt-in: drawings only while the shared game is the active window.
+  $('focus-only').checked = !!store.get('app.focusOnly', false);
+  if (bridge.setFocusOnly) bridge.setFocusOnly($('focus-only').checked);
+  $('focus-only').addEventListener('change', () => {
+    store.set('app.focusOnly', $('focus-only').checked);
+    if (bridge.setFocusOnly) bridge.setFocusOnly($('focus-only').checked);
+    log(`drawings only while the game is in front: ${$('focus-only').checked ? 'on' : 'off'}`);
+  });
   $('dialog-refresh').addEventListener('click', openSourceDialog);
   $('dialog-cancel').addEventListener('click', () => $('source-dialog').close());
   if (bridge.onOverlayTrack) {
@@ -2176,6 +2185,7 @@
         screen: 'Drawings show on top of this screen.',
         minimized: 'Game window is minimized. Drawings are hidden until it comes back.',
         background: 'Another app is in front of the game. Drawings still show on top of the game area.',
+        away: "You're not in the game right now, so drawings are hidden until you go back to it.",
         closed: 'The shared window was closed.',
         untracked: "Can't track this window's position, so drawings may be misaligned. Share the whole screen if they are.",
       };

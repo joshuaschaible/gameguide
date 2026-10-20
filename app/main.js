@@ -401,6 +401,7 @@ function hideOverlay() {
 
 // Runs on a timer: keep the overlay exactly on the captured window/screen and on top.
 let lastIdleCheck = 0;
+let focusOnly = false; // set from the player's stream settings
 function track() {
   if (!overlayWin || overlayWin.isDestroyed() || !target) return;
   if (overlayHidden) { hideOverlay(); return; }
@@ -432,6 +433,13 @@ function track() {
   // Marks always show while the game window is open (even if another app is in
   // front): hiding on "background" made marks silently disappear for some games.
   const bg = !info.foreground && !ours.includes(info.foregroundId);
+  // Opt-in: only show marks while the shared window itself is the active one
+  // (not while another app, or Game Guide, is in front).
+  if (focusOnly) {
+    const fgId = info.foregroundRaw !== undefined ? info.foregroundRaw : info.foregroundId;
+    const inGame = info.foreground && !ours.includes(fgId);
+    if (!inGame) { hideOverlay(); reportTrack('away'); return; }
+  }
 
   let r = info.rect;
   if (info.physical && isWin) r = screen.screenToDipRect(null, r);
@@ -537,7 +545,7 @@ app.whenReady().then(() => {
       // Receipt for the friend: did this mark actually make it onto the screen?
       let state = 'shown';
       if (overlayHidden) state = 'hidden';
-      else if (lastTrackState === 'minimized' || lastTrackState === 'closed') state = lastTrackState;
+      else if (lastTrackState === 'minimized' || lastTrackState === 'closed' || lastTrackState === 'away') state = lastTrackState;
       else if (!overlayWin.isVisible()) state = 'not-visible';
       mainWin.webContents.send('overlay:receipt', state);
     }
@@ -545,6 +553,7 @@ app.whenReady().then(() => {
   ipcMain.on('overlay:toast-req', (_e, text) => {
     if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('overlay:toast', String(text).slice(0, 120));
   });
+  ipcMain.on('overlay:focusOnly', (_e, on) => { focusOnly = !!on; lastTrackState = null; track(); });
     ipcMain.on('overlay:active', (_e, active) => {
     overlayActive = !!active;
     track();
