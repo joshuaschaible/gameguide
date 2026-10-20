@@ -4,6 +4,8 @@
 //   {t:'start', id, x, y, c}  {t:'move', id, x, y}  {t:'end', id}
 //   {t:'ping', x, y, c}       {t:'clear'}
 //   {t:'react', e, x}         emoji reaction floating up from (x, near bottom)
+//   {t:'arrow', id, x1, y1, x2, y2, c, h, done}  arrow; resent while dragging (same id)
+//   {t:'laser', x, y, c} / {t:'laser', off:true}  live pointer dot with a short trail
 // Renders only while there is something to show; when idle it stops its
 // animation loop entirely so it costs nothing (important over a running game).
 (function () {
@@ -14,6 +16,8 @@
   const FADE_MS = 700;   // then fade out over this long
   const PING_MS = 1600;
   const REACT_MS = 2600;
+  const LASER_IDLE_MS = 1500; // dot disappears this long after the last update
+  const LASER_TRAIL_MS = 220;
   // Only these can be shown (nothing else ever gets drawn on the player's screen).
   const REACTIONS = ['👍', '😂', '😮', '🔥', '❤️', '👀', '💀', '🎉'];
 
@@ -28,11 +32,13 @@
       this.strokes = new Map();
       this.pings = [];
       this.reactions = [];
+      this.arrows = new Map();
+      this.laser = null;
       this.running = false;
       this._loop = this._loop.bind(this);
     }
 
-    get active() { return this.strokes.size > 0 || this.pings.length > 0 || this.reactions.length > 0; }
+    get active() { return this.strokes.size > 0 || this.pings.length > 0 || this.reactions.length > 0 || this.arrows.size > 0 || !!this.laser; }
 
     _wake() {
       if (this.running) return;
@@ -73,9 +79,27 @@
           this.reactions.push({ e: msg.e, x, at: now, sway: Math.random() * Math.PI * 2 });
           break;
         }
+        case 'arrow': {
+          if (!ok(msg.x1) || !ok(msg.y1) || !ok(msg.x2) || !ok(msg.y2) || typeof msg.id !== 'string') return;
+          const a = this.arrows.get(msg.id) || { c: safeColor(msg.c), hold: holdFor(msg.h) };
+          Object.assign(a, { x1: msg.x1, y1: msg.y1, x2: msg.x2, y2: msg.y2, last: now, done: !!msg.done });
+          if (this.arrows.size > 60 && !this.arrows.has(msg.id)) this.arrows.delete(this.arrows.keys().next().value);
+          this.arrows.set(msg.id, a);
+          break;
+        }
+        case 'laser': {
+          if (msg.off) { if (this.laser) this.laser.offAt = now; break; }
+          if (!ok(msg.x) || !ok(msg.y)) return;
+          const L = this.laser && !this.laser.offAt ? this.laser : { trail: [] };
+          L.x = msg.x; L.y = msg.y; L.c = safeColor(msg.c); L.at = now; L.offAt = 0;
+          L.trail.push([msg.x, msg.y, now]);
+          this.laser = L;
+          break;
+        }
         case 'clear':
           this.strokes.clear();
           this.pings = [];
+          this.arrows.clear();
           break;
         default:
           return;
@@ -106,6 +130,14 @@
       }
       this.pings = this.pings.filter((p) => now - p.at < PING_MS);
       this.reactions = this.reactions.filter((q) => now - q.at < REACT_MS);
+      for (const [id, a] of this.arrows) {
+        if (now - a.last >= a.hold + FADE_MS) this.arrows.delete(id);
+      }
+      if (this.laser) {
+        const L = this.laser;
+        if ((L.offAt && now - L.offAt > 150) || now - L.at > LASER_IDLE_MS) this.laser = null;
+        else L.trail = L.trail.filter((t) => now - t[2] < LASER_TRAIL_MS);
+      }
 
       if (!this.active) {
         // Nothing left: canvas is cleared, stop looping until the next mark.
@@ -117,7 +149,10 @@
       const r = this.rectFn();
       if (r && r.w > 0 && r.h > 0) {
         const px = (p) => [r.x + p[0] * r.w, r.y + p[1] * r.h];
-        const lw = Math.max(3, Math.min(r.w, r.h) * 0.007);
+        // Sizes follow the picture, but not a viewer's zoom (r.z): marks keep
+        // the same on-screen thickness when zoomed in.
+        const unit = Math.min(r.w, r.h) / (r.z || 1);
+        const lw = Math.max(3, unit * 0.007);
 
         for (const s of this.strokes.values()) {
           const age = now - s.last;
@@ -144,7 +179,7 @@
         for (const p of this.pings) {
           const k = (now - p.at) / PING_MS;
           const [x, y] = px([p.x, p.y]);
-          const base = Math.max(10, Math.min(r.w, r.h) * 0.018);
+          const base = Math.max(10, unit * 0.018);
           ctx.globalAlpha = 1 - k;
           ctx.strokeStyle = p.c;
           ctx.lineWidth = Math.max(3, base * 0.25);
@@ -160,8 +195,78 @@
           ctx.fill();
         }
 
+        // Arrows: straight shaft + filled head, same outline trick as strokes.
+        for (const a of this.arrows.values()) {
+          const age = now - a.last;
+          const alpha = !a.done || age < a.hold ? 1 : Math.max(0, 1 - (age - a.hold) / FADE_MS);
+          const [x1, y1] = px([a.x1, a.y1]);
+          const [x2, y2] = px([a.x2, a.y2]);
+          const len = Math.hypot(x2 - x1, y2 - y1);
+          if (len < 2) continue;
+          const head = Math.min(len * 0.45, Math.max(16, lw * 5.5));
+          const ang = Math.atan2(y2 - y1, x2 - x1);
+          const hx = x2 - Math.cos(ang) * head * 0.8;
+          const hy = y2 - Math.sin(ang) * head * 0.8;
+          ctx.globalAlpha = alpha;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          for (const pass of [0, 1]) {
+            const color = pass === 0 ? outlineFor(a.c) : a.c;
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = (pass === 0 ? lw + 3 : lw) * 1.2;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(hx, hy);
+            ctx.stroke();
+            const grow = pass === 0 ? 2.5 : 0;
+            ctx.beginPath();
+            ctx.moveTo(x2 + Math.cos(ang) * grow, y2 + Math.sin(ang) * grow);
+            ctx.lineTo(x2 - Math.cos(ang - 0.45) * (head + grow), y2 - Math.sin(ang - 0.45) * (head + grow));
+            ctx.lineTo(x2 - Math.cos(ang + 0.45) * (head + grow), y2 - Math.sin(ang + 0.45) * (head + grow));
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+
+        // Laser: glowing dot with a short fading trail.
+        if (this.laser) {
+          const L = this.laser;
+          const fade = L.offAt ? Math.max(0, 1 - (now - L.offAt) / 150) : Math.min(1, Math.max(0, 1 - (now - L.at - LASER_IDLE_MS + 300) / 300));
+          const rad = Math.max(6, unit * 0.009);
+          if (L.trail.length > 1) {
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = L.c;
+            for (let i = 1; i < L.trail.length; i++) {
+              const k = 1 - (now - L.trail[i][2]) / LASER_TRAIL_MS;
+              const [ax, ay] = px(L.trail[i - 1]);
+              const [bx, by] = px(L.trail[i]);
+              ctx.globalAlpha = Math.max(0, k) * 0.55 * fade;
+              ctx.lineWidth = rad * 1.4 * Math.max(0.2, k);
+              ctx.beginPath();
+              ctx.moveTo(ax, ay);
+              ctx.lineTo(bx, by);
+              ctx.stroke();
+            }
+          }
+          const [lx, ly] = px([L.x, L.y]);
+          ctx.globalAlpha = fade;
+          const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, rad * 3.2);
+          g.addColorStop(0, L.c);
+          g.addColorStop(0.3, L.c);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(lx, ly, rad * 3.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(lx, ly, rad * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
         // Reactions: pop in near the bottom, float up with a little sway, fade out.
-        const size = Math.max(34, Math.min(r.w, r.h) * 0.075);
+        const size = Math.max(34, unit * 0.075);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         for (const q of this.reactions) {

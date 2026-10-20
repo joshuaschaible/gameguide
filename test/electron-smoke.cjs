@@ -75,6 +75,14 @@ const path = require('path');
       await win.evaluate(() => { for (let i = 0; i < 5; i++) setTimeout(() => window.bridge.draw({ t: 'react', e: '👍', x: 0.8 }), i * 120); });
       await ov.waitForTimeout(1000);
       console.log('reaction sounds for 5 quick reactions:', await ov.evaluate(() => window.__osc));
+      // arrow + laser in the real overlay
+      await win.evaluate(() => {
+        window.bridge.draw({ t: 'arrow', id: 'ar1', x1: 0.2, y1: 0.8, x2: 0.5, y2: 0.4, c: '#ffd23f', h: 3, first: true });
+        window.bridge.draw({ t: 'arrow', id: 'ar1', x1: 0.2, y1: 0.8, x2: 0.6, y2: 0.3, c: '#ffd23f', h: 3, done: true });
+        for (let i = 0; i < 8; i++) setTimeout(() => window.bridge.draw({ t: 'laser', x: 0.3 + i * 0.03, y: 0.5, c: '#3bf0ff' }), i * 40);
+      });
+      await win.waitForTimeout(500);
+      console.log('overlay arrow+laser:', JSON.stringify(await ov.evaluate(() => { const c = document.getElementById('c'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return { paintedPixels: n }; })), 'visible:', await vis());
       console.log('placement log:', JSON.stringify(await win.evaluate(() => window.__app.log.filter((l) => /overlay: game area/.test(l)).slice(-1))));
       // simulate macOS pushing the layer 24 px down: canvas must shift back up
       await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().find((x) => x.getTitle() === 'Game Guide overlay'); w.webContents.send('overlay:frame', { fit: true, dx: 0, dy: 24, w: 800, h: 600 }); });

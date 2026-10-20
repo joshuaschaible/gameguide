@@ -542,8 +542,9 @@ app.whenReady().then(() => {
   ipcMain.handle('overlay:close', () => { closeOverlay(); return true; });
   ipcMain.on('overlay:draw', (_e, msg) => {
     if (!overlayWin || overlayWin.isDestroyed()) return;
-    const isNew = msg && (msg.t === 'start' || msg.t === 'ping' || msg.t === 'react');
-    if (isNew && !overlayActive) {
+    const isNew = msg && (msg.t === 'start' || msg.t === 'ping' || msg.t === 'react' || (msg.t === 'arrow' && msg.first));
+    const shows = isNew || (msg && (msg.t === 'arrow' || (msg.t === 'laser' && !msg.off)));
+    if (shows && !overlayActive) {
       overlayActive = true; // show right away; the overlay confirms/denies shortly
       track();
     }

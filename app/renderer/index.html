@@ -32,14 +32,24 @@
   <symbol id="i-app-window" viewBox="0 0 256 256"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM68,96A12,12,0,1,1,80,84,12,12,0,0,1,68,96Zm40,0a12,12,0,1,1,12-12A12,12,0,0,1,108,96Z"/></symbol>
   <symbol id="i-eye" viewBox="0 0 256 256"><path d="M247.31,124.76c-.35-.79-8.82-19.58-27.65-38.41C194.57,61.26,162.88,48,128,48S61.43,61.26,36.34,86.35C17.51,105.18,9,124,8.69,124.76a8,8,0,0,0,0,6.5c.35.79,8.82,19.57,27.65,38.4C61.43,194.74,93.12,208,128,208s66.57-13.26,91.66-38.34c18.83-18.83,27.3-37.61,27.65-38.4A8,8,0,0,0,247.31,124.76ZM128,168a40,40,0,1,1,40-40A40,40,0,0,1,128,168Z"/></symbol>
   <symbol id="i-eye-slash" viewBox="0 0 256 256"><path d="M96.68,57.87a4,4,0,0,1,2.08-6.6A130.13,130.13,0,0,1,128,48c34.88,0,66.57,13.26,91.66,38.35,18.83,18.83,27.3,37.62,27.65,38.41a8,8,0,0,1,0,6.5c-.35.79-8.82,19.57-27.65,38.4q-4.28,4.26-8.79,8.07a4,4,0,0,1-5.55-.36ZM213.92,210.62a8,8,0,1,1-11.84,10.76L180,197.13A127.21,127.21,0,0,1,128,208c-34.88,0-66.57-13.26-91.66-38.34C17.51,150.83,9,132.05,8.69,131.26a8,8,0,0,1,0-6.5C9,124,17.51,105.18,36.34,86.35a135,135,0,0,1,25-19.78L42.08,45.38A8,8,0,1,1,53.92,34.62Zm-65.49-48.25-52.69-58a40,40,0,0,0,52.69,58Z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 256 256"><path d="M204,64V168a12,12,0,0,1-24,0V93L72.49,200.49a12,12,0,0,1-17-17L163,76H88a12,12,0,0,1,0-24H192A12,12,0,0,1,204,64Z"/></symbol>
+  <symbol id="i-laser" viewBox="0 0 256 256"><path d="M220.49,190.83a12,12,0,0,1,0,17L207.8,220.49a12,12,0,0,1-17,0l-56.56-56.57L115,214.09c0,.1-.08.21-.13.32a15.83,15.83,0,0,1-14.6,9.59l-.79,0a15.83,15.83,0,0,1-14.41-11L32.8,52.92A16,16,0,0,1,52.92,32.8L213,85.07a16,16,0,0,1,1.41,29.8l-.32.13-50.17,19.27ZM96,32a8,8,0,0,0,8-8V16a8,8,0,0,0-16,0v8A8,8,0,0,0,96,32ZM16,104h8a8,8,0,0,0,0-16H16a8,8,0,0,0,0,16ZM124.42,39.16a8,8,0,0,0,10.74-3.58l8-16a8,8,0,0,0-14.31-7.16l-8,16A8,8,0,0,0,124.42,39.16Zm-96,81.69-16,8a8,8,0,0,0,7.16,14.31l16-8a8,8,0,1,0-7.16-14.31Z"/></symbol>
+  <symbol id="i-zoom" viewBox="0 0 256 256"><path d="M229.66,218.34,179.6,168.28a88.21,88.21,0,1,0-11.32,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM144,120H120v24a8,8,0,0,1-16,0V120H80a8,8,0,0,1,0-16h24V80a8,8,0,0,1,16,0v24h24a8,8,0,0,1,0,16Z"/></symbol>
 </svg>
 <header class="top">
   <div class="top-left">
     <div id="viewing" class="viewing" hidden title="What your friend is sharing"><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg><span id="viewing-name"></span></div>
     <!-- drawing tools: shown here while watching -->
     <div id="tools" class="tools" hidden>
-      <button class="tool active" data-tool="pen" title="Draw (P)"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg>Draw</button>
-      <button class="tool" data-tool="ping" title="Ping a spot (O)"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg>Ping</button>
+      <div id="tool-wrap" class="pop-wrap">
+        <button id="tool-btn" class="tool active tool-current" aria-haspopup="true" aria-expanded="false" title="Tool"><span id="tool-icon"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg></span><span id="tool-name">Draw</span><span class="caret"><svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></button>
+        <div id="tool-menu" class="popover tool-menu" role="menu">
+          <button class="tool-opt active" data-tool="pen" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg><span>Draw</span><kbd>P</kbd></button>
+          <button class="tool-opt" data-tool="arrow" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg><span>Arrow</span><kbd>A</kbd></button>
+          <button class="tool-opt" data-tool="ping" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg><span>Ping</span><kbd>O</kbd></button>
+          <button class="tool-opt" data-tool="laser" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-laser"/></svg><span>Laser pointer</span><kbd>L</kbd></button>
+        </div>
+      </div>
       <div id="color-wrap" class="pop-wrap color-wrap">
         <button id="color-btn" class="tool color-btn" title="Color" aria-haspopup="true" aria-expanded="false"><span id="color-current" class="swatch"></span>Color</button>
         <div id="color-menu" class="popover color-menu">
@@ -275,6 +285,7 @@
       <canvas id="draw"></canvas>
       <div id="freeze" class="freeze" hidden></div>
       <div id="receipt" class="receipt" hidden></div>
+      <div id="zoom-pill" class="zoom-pill" hidden><svg class="ic" aria-hidden="true"><use href="#i-zoom"/></svg><span id="zoom-level">100%</span><span class="zoom-hint">Right-drag to move</span><button id="zoom-reset" class="ghost small">Reset</button></div>
     </div>
   </section>
 </main>
@@ -296,7 +307,7 @@
   <div class="slide" data-slide="2" hidden>
     <div class="slide-icon"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg></div>
     <h2>Draw on their game</h2>
-    <p>Use <b>Draw</b> to draw and <b>Ping</b> to mark a spot. Your marks show up on top of their game and fade after a few seconds (change how long in Settings).</p>
+    <p>Pick a tool: <b>Draw</b>, <b>Arrow</b>, <b>Ping</b> or <b>Laser pointer</b> (it follows your mouse live). Your marks show up on top of their game and fade after a few seconds. Scroll over the stream to zoom in; right-drag to move around.</p>
     <p>Sharing? Open stream settings (the sliders button) and click <b>Test drawing</b> to see what your friend's marks will look like.</p>
   </div>
   <div class="welcome-foot">

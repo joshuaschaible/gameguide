@@ -173,12 +173,50 @@ const stub = (name) => `
   await friend.mouse.down();
   for (let i = 1; i <= 10; i++) await friend.mouse.move(box.x + box.width * (0.3 + i * 0.03), box.y + box.height * 0.5);
   await friend.mouse.up();
-  await friend.click('.tool[data-tool=ping]');
+  await friend.click('#tool-btn'); await friend.click('.tool-opt[data-tool=ping]');
   await friend.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
   await friend.waitForTimeout(800);
+  // ---- arrow tool ----
+  await friend.click('#tool-btn');
+  await friend.screenshot({ path: '/tmp/claude-0/ui-tool-menu.png', clip: { x: 300, y: 0, width: 600, height: 230 } });
+  await friend.click('.tool-opt[data-tool=arrow]');
+  await friend.evaluate(() => { window.__arrowBefore = 0; });
+  await friend.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.7);
+  await friend.mouse.down();
+  for (let i = 1; i <= 8; i++) { await friend.mouse.move(box.x + box.width * (0.2 + i * 0.04), box.y + box.height * (0.7 - i * 0.03)); await friend.waitForTimeout(40); }
+  await friend.mouse.up();
+  await player.waitForTimeout(400);
+  console.log('arrow on player:', JSON.stringify(await player.evaluate(() => { const a = window.__drawn.filter((m) => m.t === 'arrow'); return { msgs: a.length, first: a.filter((m) => m.first).length, done: a.filter((m) => m.done).length, end: a.length ? [a[a.length - 1].x2, a[a.length - 1].y2] : null }; })));
+  await friend.screenshot({ path: '/tmp/claude-0/ui-arrow.png' });
+  // ---- laser pointer: no click, just move ----
+  await friend.keyboard.press('l');
+  console.log('tool after L:', await friend.textContent('#tool-name'));
+  for (let i = 0; i <= 12; i++) { await friend.mouse.move(box.x + box.width * (0.4 + i * 0.02), box.y + box.height * 0.4); await friend.waitForTimeout(40); }
+  await player.waitForTimeout(300);
+  console.log('laser on player:', JSON.stringify(await player.evaluate(() => { const l = window.__drawn.filter((m) => m.t === 'laser'); return { moves: l.filter((m) => !m.off).length, last: l.length ? [l[l.length - 1].x, l[l.length - 1].y] : null }; })));
+  await friend.screenshot({ path: '/tmp/claude-0/ui-laser.png' });
+  await friend.mouse.move(box.x - 20, box.y + 10);
+  await player.waitForTimeout(300);
+  console.log('laser off when leaving:', await player.evaluate(() => { const l = window.__drawn.filter((m) => m.t === 'laser'); return !!(l.length && l[l.length - 1].off); }));
+  // ---- zoom: wheel in at the center, then a ping lands where it should ----
+  await friend.keyboard.press('o');
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await friend.mouse.move(cx, cy);
+  for (let i = 0; i < 6; i++) { await friend.mouse.wheel(0, -120); await friend.waitForTimeout(30); }
+  console.log('zoom:', await friend.textContent('#zoom-level'), 'pill shown:', await friend.evaluate(() => !document.getElementById('zoom-pill').hidden));
+  await player.evaluate(() => { window.__drawn = []; });
+  await friend.mouse.click(cx + 100, cy);
+  await player.waitForTimeout(400);
+  const pz = await player.evaluate(() => window.__drawn.filter((m) => m.t === 'ping').map((m) => [m.x, m.y]));
+  const z = await friend.evaluate(() => Number(document.getElementById('zoom-level').textContent.replace('%', '')) / 100);
+  console.log('ping while zoomed', JSON.stringify(pz), 'zoom', z);
+  await friend.screenshot({ path: '/tmp/claude-0/ui-zoom.png' });
+  await friend.click('#zoom-reset');
+  console.log('zoom reset:', await friend.evaluate(() => document.getElementById('zoom-pill').hidden));
+  await friend.keyboard.press('p');
   // mark duration: friend sets 7 s, draws; the player's overlay receives h:7
   await friend.evaluate(() => localStorage.setItem('app.markSeconds', '7'));
-  await friend.click('.tool[data-tool=pen]');
+  await friend.click('#tool-btn'); await friend.click('.tool-opt[data-tool=pen]');
   await friend.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
   await friend.mouse.down(); await friend.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.25); await friend.mouse.up();
   await friend.waitForTimeout(400);
@@ -326,7 +364,7 @@ const stub = (name) => `
   // ---- drawing link dies, video keeps going (seen on Macs) ----
   const drawBox = await friend.locator('#draw').boundingBox();
   const drawAt = async (fx, fy) => {
-    await friend.click('.tool[data-tool=pen]');
+    await friend.click('#tool-btn'); await friend.click('.tool-opt[data-tool=pen]');
     await friend.mouse.move(drawBox.x + drawBox.width * fx, drawBox.y + drawBox.height * fy);
     await friend.mouse.down(); await friend.mouse.move(drawBox.x + drawBox.width * (fx + 0.05), drawBox.y + drawBox.height * fy); await friend.mouse.up();
   };

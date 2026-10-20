@@ -24,7 +24,8 @@
   let ctx = null;
   // Each kind has its own minimum gap: a pen stroke beeps once, but every
   // reaction in a quick burst gets its own short pop.
-  const MIN_GAP = { pen: 700, ping: 250, react: 60 };
+  const MIN_GAP = { pen: 700, ping: 250, react: 60, laser: 2000 };
+  let lastLaser = 0;
   const lastBeep = {};
   let voices = 0;
   function beep(kind) {
@@ -43,7 +44,7 @@
       const react = kind === 'react';
       // Reactions: short, quieter pop with a little random pitch so a burst
       // sounds lively instead of like one repeated tone.
-      const f0 = kind === 'ping' ? 880 : react ? 900 + Math.random() * 400 : 660;
+      const f0 = kind === 'ping' ? 880 : kind === 'laser' ? 1040 : react ? 900 + Math.random() * 400 : 660;
       const len = react ? 0.1 : 0.16;
       o.frequency.setValueAtTime(f0, t);
       o.frequency.exponentialRampToValueAtTime(f0 * 1.5, t + len * 0.5);
@@ -76,6 +77,13 @@
     if (msg && msg.t === 'start') beep('pen');
     if (msg && msg.t === 'ping') beep('ping');
     if (msg && msg.t === 'react') beep('react');
+    if (msg && msg.t === 'arrow' && msg.first) beep('pen');
+    // Laser: one soft cue when the pointer shows up, not on every move.
+    if (msg && msg.t === 'laser' && !msg.off) {
+      const now = performance.now();
+      if (now - lastLaser > 2000) beep('laser');
+      lastLaser = now;
+    }
     if (msg && msg.t === 'clear' && msg.local) showToast('Marks cleared');
     report();
   });

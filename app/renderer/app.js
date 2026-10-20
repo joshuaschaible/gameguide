@@ -316,6 +316,7 @@
     S.source = null;
     S.peerProfile = null;
     S.peerSource = null;
+    try { resetZoom(); } catch { /* not set up yet */ }
     S.peerUpdating = false;
     if (document.getElementById('chips')) renderChips();
     S.trackState = null;
@@ -1295,7 +1296,7 @@
       log(`no drawing path inside the video connection (${e && e.message})`);
     }
   }
-  const DRAW_TYPES = ['start', 'move', 'end', 'ping', 'clear', 'react'];
+  const DRAW_TYPES = ['start', 'move', 'end', 'ping', 'clear', 'react', 'arrow', 'laser'];
 
   // Viewer: number each mark message and send it on every open path.
   function sendDrawMsg(msg) {
@@ -1880,6 +1881,10 @@
   const video = $('video');
   const canvas = $('draw');
 
+  // Viewer zoom: view = scale z + offset (tx, ty) in canvas px. The video gets
+  // the same CSS transform, and every mark maps through contentRect(), so marks
+  // still land on the right spot of the streamer's screen.
+  const view = { z: 1, tx: 0, ty: 0 };
   function contentRect() {
     const cw = canvas.clientWidth;
     const ch = canvas.clientHeight;
@@ -1888,8 +1893,32 @@
     const scale = Math.min(cw / vw, ch / vh);
     const w = vw * scale;
     const h = vh * scale;
-    return { x: (cw - w) / 2, y: (ch - h) / 2, w, h };
+    const x = (cw - w) / 2;
+    const y = (ch - h) / 2;
+    return { x: x * view.z + view.tx, y: y * view.z + view.ty, w: w * view.z, h: h * view.z, z: view.z };
   }
+  function applyView() {
+    const cw = canvas.clientWidth;
+    const ch = canvas.clientHeight;
+    view.z = Math.min(4, Math.max(1, view.z));
+    // keep the zoomed picture covering the stage (no empty gaps when panning)
+    view.tx = Math.min(0, Math.max(cw - cw * view.z, view.tx));
+    view.ty = Math.min(0, Math.max(ch - ch * view.z, view.ty));
+    if (view.z === 1) { view.tx = 0; view.ty = 0; }
+    video.style.transformOrigin = '0 0';
+    video.style.transform = view.z === 1 ? '' : `translate(${view.tx}px, ${view.ty}px) scale(${view.z})`;
+    $('zoom-pill').hidden = view.z === 1;
+    $('zoom-level').textContent = `${Math.round(view.z * 100)}%`;
+    if (localMarks.active) localMarks._wake();
+  }
+  function zoomAt(cx, cy, z) {
+    const nz = Math.min(4, Math.max(1, z));
+    view.tx = cx - (cx - view.tx) * (nz / view.z);
+    view.ty = cy - (cy - view.ty) * (nz / view.z);
+    view.z = nz;
+    applyView();
+  }
+  function resetZoom() { view.z = 1; view.tx = 0; view.ty = 0; applyView(); }
   const localMarks = new window.Marks(canvas, contentRect);
 
   // ---------- streamer preview ----------
@@ -2007,35 +2036,133 @@
   }
   const r4 = (n) => Math.round(n * 10000) / 10000;
 
+  const clamp01 = (v) => r4(Math.min(1, Math.max(0, v)));
+  let pan = null;    // right/middle-drag (or Space+drag) moves a zoomed view
+  let arrow = null;  // arrow being dragged: {id, x1, y1, x2, y2, sentAt}
+  let laserAt = 0;   // last laser update sent
+  let laserOn = false;
+  let spaceDown = false;
+  function laserOff() {
+    if (!laserOn) return;
+    laserOn = false;
+    send({ t: 'laser', off: true });
+  }
+  function sendArrow(final) {
+    if (!arrow) return;
+    const now = Date.now();
+    if (!final && now - arrow.sentAt < 33) return; // ~30 updates a second while dragging
+    arrow.sentAt = now;
+    const m = { t: 'arrow', id: arrow.id, x1: arrow.x1, y1: arrow.y1, x2: arrow.x2, y2: arrow.y2, c: drawState.color, h: markSeconds() };
+    if (!arrow.sent) m.first = true;
+    if (final) m.done = true;
+    arrow.sent = true;
+    send(m);
+  }
+
+  canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
   canvas.addEventListener('pointerdown', (ev) => {
+    if (ev.button === 1 || ev.button === 2 || (ev.button === 0 && spaceDown)) {
+      if (view.z > 1) {
+        canvas.setPointerCapture(ev.pointerId);
+        pan = { x: ev.clientX, y: ev.clientY, tx: view.tx, ty: view.ty };
+        canvas.classList.add('panning');
+      }
+      return;
+    }
+    if (ev.button !== 0) return;
     const p = norm(ev);
     if (!inside(p)) return;
+    if (drawState.tool === 'laser') return; // the laser follows the mouse, no click needed
     if (drawState.tool === 'ping') {
       send({ t: 'ping', x: r4(p.x), y: r4(p.y), c: drawState.color });
       return;
     }
     canvas.setPointerCapture(ev.pointerId);
+    if (drawState.tool === 'arrow') {
+      arrow = { id: `a${Date.now().toString(36)}${(drawState.seq++).toString(36)}`, x1: r4(p.x), y1: r4(p.y), x2: r4(p.x), y2: r4(p.y), sentAt: 0, sent: false };
+      return; // first send happens once it has some length
+    }
     drawState.active = `s${Date.now().toString(36)}${(drawState.seq++).toString(36)}`;
     send({ t: 'start', id: drawState.active, x: r4(p.x), y: r4(p.y), c: drawState.color, h: markSeconds() });
   });
   canvas.addEventListener('pointermove', (ev) => {
-    if (!drawState.active) return;
+    if (pan) {
+      view.tx = pan.tx + (ev.clientX - pan.x);
+      view.ty = pan.ty + (ev.clientY - pan.y);
+      applyView();
+      return;
+    }
     const p = norm(ev);
-    send({ t: 'move', id: drawState.active, x: r4(Math.min(1, Math.max(0, p.x))), y: r4(Math.min(1, Math.max(0, p.y))) });
+    if (drawState.tool === 'laser') {
+      if (!inside(p)) { laserOff(); return; }
+      const now = Date.now();
+      if (now - laserAt < 33) return; // ~30 updates a second
+      laserAt = now;
+      laserOn = true;
+      send({ t: 'laser', x: r4(p.x), y: r4(p.y), c: drawState.color });
+      return;
+    }
+    if (arrow) {
+      arrow.x2 = clamp01(p.x);
+      arrow.y2 = clamp01(p.y);
+      const r = contentRect();
+      if (Math.hypot((arrow.x2 - arrow.x1) * r.w, (arrow.y2 - arrow.y1) * r.h) > 6) sendArrow(false);
+      return;
+    }
+    if (!drawState.active) return;
+    send({ t: 'move', id: drawState.active, x: clamp01(p.x), y: clamp01(p.y) });
   });
   const stopStroke = () => {
+    if (pan) { pan = null; canvas.classList.remove('panning'); return; }
+    if (arrow) {
+      if (arrow.sent) sendArrow(true); // a click with no drag draws nothing
+      arrow = null;
+      return;
+    }
     if (!drawState.active) return;
     send({ t: 'end', id: drawState.active });
     drawState.active = null;
   };
   canvas.addEventListener('pointerup', stopStroke);
   canvas.addEventListener('pointercancel', stopStroke);
+  canvas.addEventListener('pointerleave', () => { if (drawState.tool === 'laser') laserOff(); });
+  window.addEventListener('blur', laserOff);
 
+  // Zoom: mouse wheel / trackpad pinch over the stream, centered on the cursor.
+  canvas.addEventListener('wheel', (ev) => {
+    if ($('step-watch').hidden) return;
+    ev.preventDefault();
+    const b = canvas.getBoundingClientRect();
+    const step = Math.exp(-ev.deltaY * (ev.ctrlKey ? 0.01 : 0.0015));
+    zoomAt(ev.clientX - b.left, ev.clientY - b.top, view.z * step);
+  }, { passive: false });
+  $('zoom-reset').addEventListener('click', resetZoom);
+  window.addEventListener('resize', () => applyView());
+  document.addEventListener('keydown', (ev) => { if (ev.code === 'Space' && !$('step-watch').hidden && ev.target.tagName !== 'INPUT') { spaceDown = true; canvas.classList.toggle('can-pan', view.z > 1); } });
+  document.addEventListener('keyup', (ev) => { if (ev.code === 'Space') { spaceDown = false; canvas.classList.remove('can-pan'); } });
+
+  // One "Tool" dropdown: Draw (default), Arrow, Ping, Laser pointer.
+  const TOOL_NAMES = { pen: 'Draw', arrow: 'Arrow', ping: 'Ping', laser: 'Laser pointer' };
+  const TOOL_ICONS = { pen: 'pen', arrow: 'arrow', ping: 'pin', laser: 'laser' };
   function setTool(tool) {
+    if (!TOOL_NAMES[tool]) tool = 'pen';
+    if (drawState.tool === 'laser' && tool !== 'laser') laserOff();
     drawState.tool = tool;
-    document.querySelectorAll('.tool[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === tool));
+    document.querySelectorAll('.tool-opt[data-tool]').forEach((b) => {
+      const on = b.dataset.tool === tool;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+    $('tool-icon').replaceChildren(icon(TOOL_ICONS[tool]));
+    $('tool-name').textContent = TOOL_NAMES[tool];
+    canvas.dataset.tool = tool;
   }
-  document.querySelectorAll('.tool[data-tool]').forEach((b) => b.addEventListener('click', () => setTool(b.dataset.tool)));
+  document.querySelectorAll('.tool-opt[data-tool]').forEach((b) => b.addEventListener('click', () => {
+    setTool(b.dataset.tool);
+    $('tool-menu').classList.remove('open');
+    $('tool-btn').setAttribute('aria-expanded', 'false');
+  }));
+  setTool('pen');
   function setColor(color) {
     const presets = [...document.querySelectorAll('.swatch[data-color]')].map((x) => x.dataset.color.toLowerCase());
     color = String(color || '').toLowerCase();
@@ -2130,6 +2257,7 @@
     { btn: 'invite-btn', menu: 'invite-menu' },
     { btn: 'stream-set-btn', menu: 'stream-set-menu' },
     { btn: 'color-btn', menu: 'color-menu' },
+    { btn: 'tool-btn', menu: 'tool-menu' },
   ];
   function closeMenus(except) {
     for (const m of menus) {
@@ -2159,7 +2287,10 @@
     if ($('step-watch').hidden || ev.target.tagName === 'INPUT') return;
     const k = ev.key.toLowerCase();
     if (k === 'p') setTool('pen');
+    if (k === 'a') setTool('arrow');
     if (k === 'o') setTool('ping');
+    if (k === 'l') setTool('laser');
+    if (k === '0') resetZoom();
     if (k === 'e' || k === 'c') send({ t: 'clear' });
     if (k === 'escape') setReactMenu(false);
     const n = Number(ev.key);
