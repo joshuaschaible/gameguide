@@ -1918,7 +1918,8 @@
     store.set('app.previewOff', previewOff);
     const b = $('preview-toggle');
     b.setAttribute('aria-pressed', previewOff ? 'true' : 'false');
-    b.title = previewOff ? 'Show my stream preview' : 'Hide my stream preview (saves resources)';
+    b.dataset.tip = previewOff ? 'Show my stream preview' : 'Hide my stream preview (saves resources)';
+    b.removeAttribute('title');
     b.querySelector('use').setAttribute('href', previewOff ? '#i-eye-slash' : '#i-eye');
     if (previewOff) previewMarks.apply({ t: 'clear' });
     log(`stream preview ${previewOff ? 'hidden' : 'shown'}`);
@@ -2560,6 +2561,43 @@
     }
     return false;
   }
+
+  // ---------- tooltips for icon-only buttons (instead of the slow native ones) ----------
+  const TIP_SEL = '.icon-btn, .add-person, .picker-gear';
+  const tipEl = $('tip');
+  let tipFor = null;
+  let tipTimer = null;
+  function hideTip() { clearTimeout(tipTimer); tipEl.hidden = true; tipFor = null; }
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest && e.target.closest(TIP_SEL);
+    if (!el) { if (tipFor) hideTip(); return; }
+    if (el === tipFor) return;
+    const t = el.getAttribute('title');
+    if (t) { // take over the title so the native bubble never shows
+      el.dataset.tip = t;
+      el.removeAttribute('title');
+      if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', t);
+    }
+    const text = el.dataset.tip;
+    hideTip();
+    if (!text) return;
+    tipFor = el;
+    tipTimer = setTimeout(() => {
+      if (tipFor !== el || el.getAttribute('aria-expanded') === 'true') return;
+      (el.closest('dialog') || document.body).appendChild(tipEl); // above modals too
+      tipEl.textContent = text;
+      tipEl.hidden = false;
+      const r = el.getBoundingClientRect();
+      const w = tipEl.offsetWidth;
+      const h = tipEl.offsetHeight;
+      const x = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8));
+      const below = r.bottom + 8 + h < innerHeight - 8;
+      tipEl.style.left = `${Math.round(x)}px`;
+      tipEl.style.top = `${Math.round(below ? r.bottom + 8 : r.top - h - 8)}px`;
+    }, 250);
+  });
+  document.addEventListener('mousedown', hideTip, true);
+  window.addEventListener('blur', hideTip);
 
   // boot
   (async () => {

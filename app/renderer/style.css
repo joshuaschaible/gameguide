@@ -333,8 +333,13 @@ kbd { background: var(--bg-3); border-radius: 4px; padding: 1px 6px; box-shadow:
 .people-btn { background: transparent; padding: 2px 4px; display: flex; align-items: center; border-radius: 999px; height: 32px; }
 .people-btn:hover { background: var(--hover); }
 .avatar-stack { display: flex; align-items: center; }
-.avatar-stack .avatar.stacked { box-shadow: 0 0 0 2px var(--bg); position: relative; }
-.avatar-stack .avatar.stacked + .avatar.stacked { margin-left: -4px; }
+.avatar-stack .avatar.stacked { position: relative; }
+/* overlap with a real 2px gap cut out of the avatar behind (works on any background) */
+.avatar-stack .avatar.stacked + .avatar.stacked {
+  margin-left: -4px;
+  -webkit-mask: radial-gradient(circle 16px at -10px 50%, transparent 15.5px, #000 16px);
+  mask: radial-gradient(circle 16px at -10px 50%, transparent 15.5px, #000 16px);
+}
 .person { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 4px; }
 .person:hover { background: var(--hover); }
 .person-text { min-width: 0; }
@@ -343,10 +348,10 @@ kbd { background: var(--bg-3); border-radius: 4px; padding: 1px 6px; box-shadow:
 .you-tag { font-size: 10px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 4px; padding: 1px 4px; text-transform: uppercase; letter-spacing: .02em; }
 
 /* "+" invite, tucked into the avatar stack */
-.invite-wrap { margin-left: -12px; }
+.invite-wrap { margin-left: -10px; } /* 2px from the last avatar */
 .add-person {
   width: 28px; height: 28px; padding: 0; border-radius: 50%; display: grid; place-items: center;
-  background: var(--bg-2); color: var(--icon); border: 1.5px dashed var(--muted); box-shadow: 0 0 0 2px var(--bg); position: relative;
+  background: var(--bg-2); color: var(--icon); border: 1.5px dashed var(--muted); position: relative;
 }
 .add-person:hover, .add-person[aria-expanded="true"] { color: var(--text-strong); border-color: var(--accent); background: var(--bg-3); }
 
@@ -523,3 +528,7 @@ dialog.picker-dialog .warn { margin: 0 0 12px; }
 .preview-off p b { color: var(--text-strong); font-size: 16px; }
 .share-view.waiting .preview-off { display: none; } /* the invite card is in front then */
 #preview-toggle[aria-pressed="true"] { background: var(--active); color: var(--text-strong); }
+
+/* tooltips (no caret) */
+.tip { position: fixed; z-index: 1000; pointer-events: none; white-space: nowrap; background: var(--float); color: var(--text-strong); font-size: 14px; font-weight: 500; padding: 7px 11px; border-radius: 8px; box-shadow: var(--shadow); }
+.source-btn .caret .ic { width: 14px; height: 14px; }

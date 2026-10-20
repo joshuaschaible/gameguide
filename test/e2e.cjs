@@ -145,6 +145,14 @@ const stub = (name) => `
   await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png' });
   await player.keyboard.press('Escape');
   console.log('invite + hidden once friend is in:', await player.evaluate(() => document.getElementById('invite-wrap').hidden));
+  await friend.hover('#open-settings');
+  await friend.waitForTimeout(450);
+  console.log('tooltip:', JSON.stringify(await friend.evaluate(() => ({ shown: !document.getElementById('tip').hidden, text: document.getElementById('tip').textContent, nativeTitle: document.getElementById('open-settings').getAttribute('title') }))));
+  await friend.screenshot({ path: '/tmp/claude-0/ui-tooltip.png', clip: { x: 800, y: 0, width: 400, height: 110 } });
+  await friend.hover('#people-btn');
+  await friend.waitForTimeout(250);
+  await friend.screenshot({ path: '/tmp/claude-0/ui-avatars-hover.png', clip: { x: 860, y: 0, width: 160, height: 60 } });
+  await friend.mouse.move(600, 400);
   await friend.click('#react-btn');
   await friend.click('#color-btn');
   console.log('one dropdown at a time (react->color):', await friend.evaluate(() => [document.getElementById('react-menu').hidden, document.getElementById('color-menu').classList.contains('open')]));
