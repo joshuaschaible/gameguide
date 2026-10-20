@@ -198,7 +198,8 @@ async function listSources() {
         kind: 'screen',
         id: s.id,
         name: 'Whole screen', // numbered below once all screens are known
-        order: d ? [d.bounds.x, d.bounds.y] : [1e9 + screenIdx, 0],
+        // Main monitor first, then the others left to right (then top to bottom).
+        order: d ? [d.id === screen.getPrimaryDisplay().id ? -1e9 : d.bounds.x, d.bounds.y] : [1e9 + screenIdx, 0],
         displayId: s.display_id || '',
         thumb,
         icon: '',
@@ -223,7 +224,7 @@ async function listSources() {
   // Most likely game first; mark it if we're fairly confident.
   const wins = out.filter((x) => x.kind === 'window').sort((a, b) => b.score - a.score);
   if (wins.length && wins[0].score >= 3) wins[0].likelyGame = true;
-  // Several monitors: "Screen 1", "Screen 2"… numbered left to right (then top to bottom).
+  // Several monitors: main monitor = "Screen 1", the rest "Screen 2"… left to right.
   const screensOut = out.filter((x) => x.kind === 'screen')
     .sort((a, b) => (a.order[0] - b.order[0]) || (a.order[1] - b.order[1]));
   if (screensOut.length > 1) screensOut.forEach((x, i) => { x.name = `Screen ${i + 1}`; });
