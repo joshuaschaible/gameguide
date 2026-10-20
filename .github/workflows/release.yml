@@ -17,7 +17,25 @@ permissions:
   contents: write
 
 jobs:
+  # Stops right away (before building) if this version was already released,
+  # e.g. when Run workflow is clicked twice. Bump app/package.json to release again.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version not released yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./app/package.json').version")
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error title=Already released::v$VERSION is already released. Nothing new to publish (bump the version in app/package.json first)."
+            exit 1
+          fi
+          echo "Releasing v$VERSION"
+
   build:
+    needs: check
     strategy:
       matrix:
         include:
