@@ -5,7 +5,8 @@
 //   {t:'ping', x, y, c}       {t:'clear'}
 //   {t:'react', e, x}         emoji reaction floating up from (x, near bottom)
 //   {t:'arrow', id, x1, y1, x2, y2, c, h, done}  arrow; resent while dragging (same id)
-//   {t:'laser', x, y, c} / {t:'laser', off:true}  live pointer dot with a short trail
+//   {t:'laser', x, y, c, ts} / {t:'laser', off:true}  live pointer dot with a short trail
+//     (ts = sender's clock; the receiver replays a little behind, interpolating, so it glides)
 // Renders only while there is something to show; when idle it stops its
 // animation loop entirely so it costs nothing (important over a running game).
 (function () {
@@ -17,7 +18,13 @@
   const PING_MS = 1600;
   const REACT_MS = 2600;
   const LASER_IDLE_MS = 1500; // dot disappears this long after the last update
-  const LASER_TRAIL_MS = 220;
+  const LASER_TRAIL_MS = 260;
+  const LASER_DELAY_MS = 50;  // playout delay on the receiving side (soaks up network jitter)
+  // Catmull-Rom through 4 points: smooth curve that passes through every sample.
+  const cr = (p0, p1, p2, p3, t) => {
+    const t2 = t * t; const t3 = t2 * t;
+    return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+  };
   // Only these can be shown (nothing else ever gets drawn on the player's screen).
   const REACTIONS = ['👍', '😂', '😮', '🔥', '❤️', '👀', '💀', '🎉'];
 
@@ -37,6 +44,9 @@
       this.running = false;
       this._loop = this._loop.bind(this);
     }
+
+    // The person moving the pointer sees it with no delay; everyone else a little behind.
+    laserDelay() { return typeof this.opts.laserDelay === 'number' ? this.opts.laserDelay : LASER_DELAY_MS; }
 
     get active() { return this.strokes.size > 0 || this.pings.length > 0 || this.reactions.length > 0 || this.arrows.size > 0 || !!this.laser; }
 
@@ -90,10 +100,20 @@
         case 'laser': {
           if (msg.off) { if (this.laser) this.laser.offAt = now; break; }
           if (!ok(msg.x) || !ok(msg.y)) return;
-          const L = this.laser && !this.laser.offAt ? this.laser : { trail: [] };
-          L.x = msg.x; L.y = msg.y; L.c = safeColor(msg.c); L.at = now; L.offAt = 0;
-          L.trail.push([msg.x, msg.y, now]);
-          this.laser = L;
+          let L = this.laser;
+          if (!L || L.offAt) L = this.laser = { samples: [], offset: undefined, lastAt: now };
+          // Map the sender's clock onto ours: the smallest (arrival - sent) seen,
+          // allowed to drift up slowly in case the network gets slower.
+          const ts = typeof msg.ts === 'number' ? msg.ts : now;
+          const o = now - ts;
+          L.offset = L.offset === undefined ? o : Math.min(o, L.offset + (now - L.lastAt) * 0.05);
+          L.lastAt = now;
+          L.c = safeColor(msg.c);
+          const t = ts + L.offset;
+          const last = L.samples[L.samples.length - 1];
+          if (last && t <= last[2]) break; // out of order / duplicate
+          L.samples.push([msg.x, msg.y, t]);
+          if (L.samples.length > 240) L.samples.splice(0, L.samples.length - 240);
           break;
         }
         case 'clear':
@@ -135,8 +155,11 @@
       }
       if (this.laser) {
         const L = this.laser;
-        if ((L.offAt && now - L.offAt > 150) || now - L.at > LASER_IDLE_MS) this.laser = null;
-        else L.trail = L.trail.filter((t) => now - t[2] < LASER_TRAIL_MS);
+        if ((L.offAt && now - L.offAt > 180) || now - L.lastAt > LASER_IDLE_MS) this.laser = null;
+        else {
+          const keepFrom = now - this.laserDelay() - LASER_TRAIL_MS - 200;
+          while (L.samples.length > 4 && L.samples[1][2] < keepFrom) L.samples.shift();
+        }
       }
 
       if (!this.active) {
@@ -229,27 +252,33 @@
           }
         }
 
-        // Laser: glowing dot with a short fading trail.
-        if (this.laser) {
+        // Laser: glowing dot gliding along a smooth curve, with a tapered trail.
+        if (this.laser && this.laser.samples.length) {
           const L = this.laser;
-          const fade = L.offAt ? Math.max(0, 1 - (now - L.offAt) / 150) : Math.min(1, Math.max(0, 1 - (now - L.at - LASER_IDLE_MS + 300) / 300));
+          const fade = L.offAt ? Math.max(0, 1 - (now - L.offAt) / 180) : Math.min(1, Math.max(0, 1 - (now - L.lastAt - LASER_IDLE_MS + 300) / 300));
           const rad = Math.max(6, unit * 0.009);
-          if (L.trail.length > 1) {
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = L.c;
-            for (let i = 1; i < L.trail.length; i++) {
-              const k = 1 - (now - L.trail[i][2]) / LASER_TRAIL_MS;
-              const [ax, ay] = px(L.trail[i - 1]);
-              const [bx, by] = px(L.trail[i]);
-              ctx.globalAlpha = Math.max(0, k) * 0.55 * fade;
-              ctx.lineWidth = rad * 1.4 * Math.max(0.2, k);
+          const tNow = now - this.laserDelay();
+          const at = (t) => laserPos(L.samples, t);
+          // trail: sample the curve every ~6 ms over the last LASER_TRAIL_MS
+          const steps = Math.ceil(LASER_TRAIL_MS / 6);
+          let prev = px(at(tNow - LASER_TRAIL_MS));
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = L.c;
+          for (let i = 1; i <= steps; i++) {
+            const k = i / steps; // 0 = tail, 1 = head
+            const cur = px(at(tNow - LASER_TRAIL_MS * (1 - k)));
+            if (Math.abs(cur[0] - prev[0]) + Math.abs(cur[1] - prev[1]) > 0.3) {
+              ctx.globalAlpha = fade * 0.6 * k * k;
+              ctx.lineWidth = rad * (0.25 + 1.35 * k);
               ctx.beginPath();
-              ctx.moveTo(ax, ay);
-              ctx.lineTo(bx, by);
+              ctx.moveTo(prev[0], prev[1]);
+              ctx.lineTo(cur[0], cur[1]);
               ctx.stroke();
             }
+            prev = cur;
           }
-          const [lx, ly] = px([L.x, L.y]);
+          const [lx, ly] = px(at(tNow));
+          this.laserDrawnAt = [lx, ly, tNow]; // (for tests)
           ctx.globalAlpha = fade;
           const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, rad * 3.2);
           g.addColorStop(0, L.c);
@@ -286,6 +315,18 @@
       }
       requestAnimationFrame(this._loop);
     }
+  }
+
+  // Position on the laser path at time t (samples: [x, y, time], oldest first).
+  function laserPos(sm, t) {
+    const n = sm.length;
+    if (n === 1 || t <= sm[0][2]) return [sm[0][0], sm[0][1]];
+    if (t >= sm[n - 1][2]) return [sm[n - 1][0], sm[n - 1][1]]; // never guess ahead
+    let i = n - 2;
+    while (i > 0 && sm[i][2] > t) i--;
+    const a = sm[Math.max(0, i - 1)]; const b = sm[i]; const c = sm[i + 1]; const d = sm[Math.min(n - 1, i + 2)];
+    const k = (t - b[2]) / Math.max(1, c[2] - b[2]);
+    return [cr(a[0], b[0], c[0], d[0], k), cr(a[1], b[1], c[1], d[1], k)];
   }
 
   // Dark outline for light colors, light outline for dark ones, so every

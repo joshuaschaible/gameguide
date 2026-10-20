@@ -1919,7 +1919,7 @@
     applyView();
   }
   function resetZoom() { view.z = 1; view.tx = 0; view.ty = 0; applyView(); }
-  const localMarks = new window.Marks(canvas, contentRect);
+  const localMarks = new window.Marks(canvas, contentRect, { laserDelay: 0 }); // your own pointer: no delay
 
   // ---------- streamer preview ----------
   // The player sees their stream like the friend does, marks included. To save
@@ -2096,10 +2096,10 @@
     if (drawState.tool === 'laser') {
       if (!inside(p)) { laserOff(); return; }
       const now = Date.now();
-      if (now - laserAt < 33) return; // ~30 updates a second
+      if (now - laserAt < 15) return; // ~60 updates a second
       laserAt = now;
       laserOn = true;
-      send({ t: 'laser', x: r4(p.x), y: r4(p.y), c: drawState.color });
+      send({ t: 'laser', x: r4(p.x), y: r4(p.y), c: drawState.color, ts: Math.round(performance.now()) });
       return;
     }
     if (arrow) {
