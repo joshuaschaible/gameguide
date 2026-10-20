@@ -138,6 +138,12 @@ const stub = (name) => `
   await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png' });
   await player.keyboard.press('Escape');
   console.log('invite + hidden once friend is in:', await player.evaluate(() => document.getElementById('invite-wrap').hidden));
+  await friend.click('#react-btn');
+  await friend.click('#color-btn');
+  console.log('one dropdown at a time (react->color):', await friend.evaluate(() => [document.getElementById('react-menu').hidden, document.getElementById('color-menu').classList.contains('open')]));
+  await friend.click('#react-btn');
+  console.log('one dropdown at a time (color->react):', await friend.evaluate(() => [!document.getElementById('react-menu').hidden, document.getElementById('color-menu').classList.contains('open')]));
+  await friend.keyboard.press('Escape');
   await friend.click('#color-btn');
   await friend.waitForTimeout(200);
   await friend.screenshot({ path: '/tmp/claude-0/ui-colors.png', clip: { x: 0, y: 0, width: 600, height: 200 } });

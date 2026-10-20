@@ -209,7 +209,7 @@
     const src = S.role === 'join' && S.peerSource;
     const on = !!src && !$('step-watch').hidden;
     $('viewing').hidden = !on;
-    if (on) $('viewing-name').textContent = `Viewing ${src.kind === 'screen' ? 'Whole screen' : src.name}`;
+    if (on) $('viewing-name').textContent = `Viewing ${src.name || (src.kind === 'screen' ? 'Whole screen' : 'shared window')}`;
   }
   function bumpProfile() { S.profileVer = Date.now(); store.set('app.profileVer', S.profileVer); }
   // Control messages go on every open path (drawing link + video connection).
@@ -2077,7 +2077,7 @@
     $('react-btn').setAttribute('aria-expanded', String(open));
     $('react-btn').classList.toggle('active', open);
   };
-  $('react-btn').addEventListener('click', (ev) => { ev.stopPropagation(); setReactMenu($('react-menu').hidden); });
+  $('react-btn').addEventListener('click', (ev) => { ev.stopPropagation(); const open = $('react-menu').hidden; if (open) closeMenus(); setReactMenu(open); });
   document.addEventListener('click', (ev) => { if (!$('react-menu').hidden && !ev.target.closest('.react-wrap')) setReactMenu(false); });
 
   // ---------- stall detector ----------
@@ -2118,13 +2118,14 @@
       ev.stopPropagation();
       const open = !$(m.menu).classList.contains('open');
       closeMenus(m.menu);
+      setReactMenu(false); // only one dropdown open at a time
       $(m.menu).classList.toggle('open', open);
       $(m.btn).setAttribute('aria-expanded', String(open));
       if (open && m.onOpen) m.onOpen();
     });
   }
   document.addEventListener('click', (ev) => { if (!ev.target.closest('.pop-wrap')) closeMenus(); });
-  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMenus(); });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { closeMenus(); setReactMenu(false); } });
   setInterval(() => { if ($('conn-menu').classList.contains('open')) fillConnMenu(); }, 1000);
   $('conn-restart').addEventListener('click', () => { closeMenus(); $('restart-stream').click(); });
   $('conn-details').addEventListener('click', () => { closeMenus(); $('open-details').click(); });
