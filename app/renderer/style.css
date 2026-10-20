@@ -448,3 +448,18 @@ kbd { background: var(--bg-3); border-radius: 4px; padding: 1px 6px; box-shadow:
 .add-person .ic { width: 14px; height: 14px; }
 .upload-slot .ic { width: 18px; height: 18px; }
 .source-btn .caret .ic { width: 12px; height: 12px; }
+
+/* viewer: what the friend is sharing */
+.viewing { display: inline-flex; align-items: center; gap: 6px; max-width: 280px; height: 32px; padding: 0 10px; color: var(--text-strong); font-size: 14px; font-weight: 600; }
+.viewing .ic { width: 18px; height: 18px; }
+#viewing-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); }
+
+/* text that truncates needs room for descenders (g, y, p) */
+.source-btn .source-name, #viewing-name { line-height: 1.35; padding-bottom: 1px; }
+
+/* viewer bar: what's shared on the left, drawing tools centered, people/settings right */
+body.viewer-mode .top { display: grid; grid-template-columns: 1fr auto 1fr; }
+body.viewer-mode .top-left { display: contents; }
+body.viewer-mode #viewing { grid-column: 1; justify-self: start; min-width: 0; }
+body.viewer-mode #tools { grid-column: 2; }
+body.viewer-mode .top-right { grid-column: 3; justify-self: end; }

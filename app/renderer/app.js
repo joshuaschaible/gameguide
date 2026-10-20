@@ -92,6 +92,8 @@
     if (id !== 'step-watch' && $('react-menu')) $('react-menu').hidden = true;
     renderChips();
     updateConn();
+    showViewing();
+    document.body.classList.toggle('viewer-mode', id === 'step-watch');
     if (S.previewReady) updatePreview();
   }
   // Who's here: overlapping avatars; hover or click shows a list with names,
@@ -197,7 +199,18 @@
 
   // pv = profile version; changes whenever my name/avatar changes, so the
   // other side can tell (from heartbeats) that its copy is out of date.
-  function myProfileMsg() { return { t: 'hello', name: S.name, avatar: S.avatar, pv: S.profileVer }; }
+  function myProfileMsg() {
+    const m = { t: 'hello', name: S.name, avatar: S.avatar, pv: S.profileVer };
+    // The streamer also says what it's sharing, so the viewer can show it.
+    if (S.role === 'share' && S.source) m.src = { name: String(S.source.name || '').slice(0, 80), kind: S.source.kind };
+    return m;
+  }
+  function showViewing() {
+    const src = S.role === 'join' && S.peerSource;
+    const on = !!src && !$('step-watch').hidden;
+    $('viewing').hidden = !on;
+    if (on) $('viewing-name').textContent = `Viewing ${src.kind === 'screen' ? 'Whole screen' : src.name}`;
+  }
   function bumpProfile() { S.profileVer = Date.now(); store.set('app.profileVer', S.profileVer); }
   // Control messages go on every open path (drawing link + video connection).
   function sendCtl(msg) {
@@ -226,6 +239,10 @@
     const name = String(msg.name || '').slice(0, 24) || 'Friend';
     const changed = S.peerProfile && (S.peerProfile.name !== name || JSON.stringify(S.peerProfile.avatar) !== JSON.stringify(window.Profile.sanitize(msg.avatar)));
     S.peerProfile = { name, avatar: window.Profile.sanitize(msg.avatar), pv: msg.pv || null };
+    if (msg.src && typeof msg.src === 'object') {
+      S.peerSource = { name: String(msg.src.name || '').slice(0, 80) || 'Shared window', kind: msg.src.kind === 'screen' ? 'screen' : 'window' };
+      showViewing();
+    }
     if (changed) log(`friend updated their profile (${name})`);
     renderChips();
   }
@@ -297,6 +314,7 @@
     S.viewerStat = null;
     S.source = null;
     S.peerProfile = null;
+    S.peerSource = null;
     S.peerUpdating = false;
     if (document.getElementById('chips')) renderChips();
     S.trackState = null;
@@ -902,6 +920,7 @@
 
   function showSourceName(source) {
     $('source-name').textContent = `Sharing ${source.name}`;
+    if (S.role === 'share') sendCtl(myProfileMsg()); // tell the viewer what's shared now
   }
 
   async function startSharing(source, opts) {

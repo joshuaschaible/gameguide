@@ -32,11 +32,9 @@
 </svg>
 <header class="top">
   <div class="top-left">
+    <div id="viewing" class="viewing" hidden title="What your friend is sharing"><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg><span id="viewing-name"></span></div>
     <!-- drawing tools: shown here while watching -->
     <div id="tools" class="tools" hidden>
-      <button class="tool active" data-tool="pen" title="Pen (P)"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg>Pen</button>
-      <button class="tool" data-tool="ping" title="Pointer (O)"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg>Pointer</button>
-      <span class="sep"></span>
       <div id="color-wrap" class="pop-wrap color-wrap">
         <button id="color-btn" class="tool color-btn" title="Color" aria-haspopup="true" aria-expanded="false"><span id="color-current" class="swatch"></span></button>
         <div id="color-menu" class="popover color-menu">
@@ -55,11 +53,14 @@
         </div>
       </div>
       <span class="sep"></span>
-      <button id="clear" class="tool" title="Erase all marks (E)"><svg class="ic" aria-hidden="true"><use href="#i-eraser"/></svg>Erase</button>
+      <button class="tool active" data-tool="pen" title="Draw (P)"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg>Draw</button>
+      <button class="tool" data-tool="ping" title="Ping a spot (O)"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg>Ping</button>
+      <span class="sep"></span>
       <div class="react-wrap">
         <button id="react-btn" class="tool" title="Send a reaction (keys 1-8)" aria-haspopup="true" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-smile-plus"/></svg>React</button>
         <div id="react-menu" class="react-menu" role="menu" hidden></div>
       </div>
+      <button id="clear" class="tool" hidden title="Erase all marks (E)"><svg class="ic" aria-hidden="true"><use href="#i-eraser"/></svg>Erase</button>
     </div>
     <!-- streamer controls: shown here while sharing -->
     <div id="share-tools" class="tools" hidden>
@@ -303,7 +304,7 @@
   <div class="slide" data-slide="2" hidden>
     <div class="slide-icon"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg></div>
     <h2>Draw on their game</h2>
-    <p>Use <b>Pen</b> to draw and <b>Pointer</b> to ping a spot. Your marks show up on top of their game and fade after a few seconds (change how long in Settings).</p>
+    <p>Use <b>Draw</b> to draw and <b>Ping</b> to mark a spot. Your marks show up on top of their game and fade after a few seconds (change how long in Settings).</p>
     <p>Sharing? Open stream settings (the sliders button) and click <b>Test drawing</b> to see what your friend's marks will look like.</p>
   </div>
   <div class="welcome-foot">

@@ -193,6 +193,7 @@ const stub = (name) => `
   console.log('friend after 720p30:', await friend.textContent('#watch-status'));
   console.log('player pipeline:', await player.textContent('#q-pipe'));
   console.log('source label:', await player.textContent('#source-name'), 'overlay target', JSON.stringify(await player.evaluate(() => window.__overlay)));
+  console.log('viewer sees source:', await friend.evaluate(() => [!document.getElementById('viewing').hidden, document.getElementById('viewing-name').textContent]));
   // switch to whole screen mid-stream
   await player.click('#change-source');
   await player.waitForSelector('#dialog-sources .source');
@@ -201,6 +202,7 @@ const stub = (name) => `
   console.log('after switch, player:', await player.textContent('#source-name'), '|', await player.textContent('#share-status'));
   console.log('after switch, friend video', await friend.evaluate(() => [document.getElementById('video').videoWidth, document.getElementById('video').videoHeight]), await friend.textContent('#watch-status'));
   console.log('overlay target now', JSON.stringify(await player.evaluate(() => window.__overlay)));
+  console.log('viewer sees source after switch:', await friend.textContent('#viewing-name')); await friend.screenshot({ path: '/tmp/claude-0/ui-viewer-bar.png', clip: { x: 0, y: 0, width: 1200, height: 60 } });
   // simulate a stalled capture (exclusive fullscreen)
   await player.evaluate(() => clearInterval(window.__fake));
   await player.waitForTimeout(7500);
