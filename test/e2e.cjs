@@ -133,6 +133,13 @@ const stub = (name) => `
   await player.waitForTimeout(400);
   console.log('preview back in front:', JSON.stringify(await pv()));
   await player.screenshot({ path: '/tmp/claude-0/ui-share-preview.png' });
+  await player.click('#preview-toggle');
+  await player.waitForTimeout(300);
+  console.log('preview off:', JSON.stringify(await player.evaluate(() => ({ placeholder: !document.getElementById('preview-off').hidden, decoding: !!document.getElementById('preview-video').srcObject }))));
+  await player.screenshot({ path: '/tmp/claude-0/ui-preview-off.png' });
+  await player.click('#preview-show');
+  await player.waitForTimeout(1200);
+  console.log('preview back on:', JSON.stringify(await player.evaluate(() => ({ placeholder: !document.getElementById('preview-off').hidden, decoding: !!document.getElementById('preview-video').srcObject }))));
   await player.click('#stream-set-btn');
   await player.waitForTimeout(200);
   await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png' });

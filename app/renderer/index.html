@@ -30,6 +30,8 @@
   <symbol id="i-plus" viewBox="0 0 256 256"><path d="M228,128a12,12,0,0,1-12,12H140v76a12,12,0,0,1-24,0V140H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76A12,12,0,0,1,228,128Z"/></symbol>
   <symbol id="i-camera" viewBox="0 0 256 256"><path d="M208,56H180.28L166.65,35.56A8,8,0,0,0,160,32H96a8,8,0,0,0-6.65,3.56L75.71,56H48A24,24,0,0,0,24,80V192a24,24,0,0,0,24,24H208a24,24,0,0,0,24-24V80A24,24,0,0,0,208,56Zm-44,76a36,36,0,1,1-36-36A36,36,0,0,1,164,132Z"/></symbol>
   <symbol id="i-app-window" viewBox="0 0 256 256"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM68,96A12,12,0,1,1,80,84,12,12,0,0,1,68,96Zm40,0a12,12,0,1,1,12-12A12,12,0,0,1,108,96Z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 256 256"><path d="M247.31,124.76c-.35-.79-8.82-19.58-27.65-38.41C194.57,61.26,162.88,48,128,48S61.43,61.26,36.34,86.35C17.51,105.18,9,124,8.69,124.76a8,8,0,0,0,0,6.5c.35.79,8.82,19.57,27.65,38.4C61.43,194.74,93.12,208,128,208s66.57-13.26,91.66-38.34c18.83-18.83,27.3-37.61,27.65-38.4A8,8,0,0,0,247.31,124.76ZM128,168a40,40,0,1,1,40-40A40,40,0,0,1,128,168Z"/></symbol>
+  <symbol id="i-eye-slash" viewBox="0 0 256 256"><path d="M96.68,57.87a4,4,0,0,1,2.08-6.6A130.13,130.13,0,0,1,128,48c34.88,0,66.57,13.26,91.66,38.35,18.83,18.83,27.3,37.62,27.65,38.41a8,8,0,0,1,0,6.5c-.35.79-8.82,19.57-27.65,38.4q-4.28,4.26-8.79,8.07a4,4,0,0,1-5.55-.36ZM213.92,210.62a8,8,0,1,1-11.84,10.76L180,197.13A127.21,127.21,0,0,1,128,208c-34.88,0-66.57-13.26-91.66-38.34C17.51,150.83,9,132.05,8.69,131.26a8,8,0,0,1,0-6.5C9,124,17.51,105.18,36.34,86.35a135,135,0,0,1,25-19.78L42.08,45.38A8,8,0,1,1,53.92,34.62Zm-65.49-48.25-52.69-58a40,40,0,0,0,52.69,58Z"/></symbol>
 </svg>
 <header class="top">
   <div class="top-left">
@@ -101,6 +103,7 @@
         </div>
       </div>
     </div>
+    <button id="preview-toggle" class="icon-btn" hidden title="Hide my stream preview (saves resources)" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></button>
     <div id="stream-set" class="pop-wrap" hidden>
       <button id="stream-set-btn" class="icon-btn" aria-haspopup="true" aria-expanded="false" title="Stream settings">
         <svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>
@@ -230,6 +233,11 @@
       <video id="preview-video" muted playsinline></video>
       <canvas id="preview-draw"></canvas>
       <div id="preview-paused" class="preview-paused" hidden>Preview paused while you play</div>
+      <div id="preview-off" class="preview-off" hidden>
+        <svg class="ic" aria-hidden="true"><use href="#i-eye-slash"/></svg>
+        <p><b>Preview hidden</b><br>Your friend still sees your stream. Hiding it here saves CPU and GPU.</p>
+        <button id="preview-show" class="ghost small">Show preview</button>
+      </div>
       <div class="stage-notes">
         <p id="overlay-hidden" class="stage-note warn" hidden>Drawings are hidden. Press <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> to show them again.</p>
         <p id="q-hint" class="stage-note warn"></p>

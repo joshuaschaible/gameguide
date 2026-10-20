@@ -88,6 +88,7 @@
     $('share-tools').hidden = id !== 'step-share';
     updateInviteBtn();
     $('stream-set').hidden = id !== 'step-share';
+    $('preview-toggle').hidden = id !== 'step-share';
     document.body.classList.toggle('watching', id === 'step-watch' || id === 'step-share');
     if (id !== 'step-watch' && $('react-menu')) $('react-menu').hidden = true;
     renderChips();
@@ -1908,15 +1909,35 @@
   const previewMarks = new window.Marks(pCanvas, fitRect(pVideo, pCanvas));
   function drawLocal(m) {
     bridge.draw(m);
-    if (S.role === 'share') previewMarks.apply(m);
+    if (S.role === 'share' && !previewOff) previewMarks.apply(m);
+  }
+  // Streamer can turn the preview off entirely: no decoding, no mark drawing.
+  let previewOff = !!store.get('app.previewOff', false);
+  function setPreviewOff(off) {
+    previewOff = !!off;
+    store.set('app.previewOff', previewOff);
+    const b = $('preview-toggle');
+    b.setAttribute('aria-pressed', previewOff ? 'true' : 'false');
+    b.title = previewOff ? 'Show my stream preview' : 'Hide my stream preview (saves resources)';
+    b.querySelector('use').setAttribute('href', previewOff ? '#i-eye-slash' : '#i-eye');
+    if (previewOff) previewMarks.apply({ t: 'clear' });
+    log(`stream preview ${previewOff ? 'hidden' : 'shown'}`);
+    updatePreview();
   }
   function previewWanted() {
-    return S.role === 'share' && !S.ended && !$('step-share').hidden && !!S.stream
+    return S.role === 'share' && !S.ended && !$('step-share').hidden && !!S.stream && !previewOff
       && document.visibilityState === 'visible' && document.hasFocus();
   }
   function updatePreview() {
     const has = S.role === 'share' && !S.ended && !!S.stream;
+    $('preview-off').hidden = !(has && previewOff);
+    $('preview-draw').hidden = previewOff;
     if (!has) { if (pVideo.srcObject) pVideo.srcObject = null; $('preview-paused').hidden = true; return; }
+    if (previewOff) {
+      if (pVideo.srcObject) { pVideo.pause(); pVideo.srcObject = null; } // stop decoding completely
+      $('preview-paused').hidden = true;
+      return;
+    }
     if (previewWanted()) {
       if (pVideo.srcObject !== S.stream) pVideo.srcObject = S.stream;
       if (pVideo.paused) pVideo.play().catch(() => {});
@@ -1930,6 +1951,9 @@
   window.addEventListener('blur', updatePreview);
   document.addEventListener('visibilitychange', updatePreview);
   setInterval(updatePreview, 1000); // picks up a new capture after Change source / Restart stream
+  $('preview-toggle').addEventListener('click', () => setPreviewOff(!previewOff));
+  $('preview-show').addEventListener('click', () => setPreviewOff(false));
+  if (previewOff) setPreviewOff(true);
   S.previewReady = true;
 
   // ---------- join code: six boxes over one real input ----------
