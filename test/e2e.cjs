@@ -71,7 +71,13 @@ const stub = (name) => `
   const friend = await mk('Saturn');
 
   await player.click('#go-share');
-  await player.click('.source');
+  await player.waitForSelector('.pick');
+  await player.hover('.pick');
+  await player.waitForTimeout(250);
+  await player.screenshot({ path: '/tmp/claude-0/ui-picker.png' });
+  await player.click('.picker-gear');
+  await player.screenshot({ path: '/tmp/claude-0/ui-picker-quality.png' });
+  await player.click('.pick');
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code = await player.textContent('#code');
   await player.screenshot({ path: '/tmp/claude-0/ui-share-waiting.png' });
@@ -196,8 +202,9 @@ const stub = (name) => `
   console.log('viewer sees source:', await friend.evaluate(() => [!document.getElementById('viewing').hidden, document.getElementById('viewing-name').textContent]));
   // switch to whole screen mid-stream
   await player.click('#change-source');
-  await player.waitForSelector('#dialog-sources .source');
-  await player.locator('#dialog-sources .source').nth(1).click();
+  await player.waitForSelector('#dialog-sources .pick');
+  await player.click('#dialog-sources [data-tab=screen]');
+  await player.locator('#dialog-sources .pick').nth(0).click();
   await player.waitForTimeout(5000);
   console.log('after switch, player:', await player.textContent('#source-name'), '|', await player.textContent('#share-status'));
   console.log('after switch, friend video', await friend.evaluate(() => [document.getElementById('video').videoWidth, document.getElementById('video').videoHeight]), await friend.textContent('#watch-status'));
@@ -211,8 +218,9 @@ const stub = (name) => `
   console.log('player log restart:', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /restart/.test(l)))));
   // switch back to the game window, then simulate the game recreating its window
   await player.click('#change-source');
-  await player.waitForSelector('#dialog-sources .source');
-  await player.locator('#dialog-sources .source').nth(0).click();
+  await player.waitForSelector('#dialog-sources .pick');
+  await player.click('#dialog-sources [data-tab=window]');
+  await player.locator('#dialog-sources .pick').nth(0).click();
   await player.waitForTimeout(2500);
   await player.evaluate(() => window.__app.stream.getVideoTracks()[0].dispatchEvent(new Event('ended')));
   await player.waitForTimeout(3000);
@@ -390,7 +398,7 @@ const stub = (name) => `
 
   // reshare and rejoin works
   await player.click('#go-share');
-  await player.click('.source');
+  await player.click('.pick');
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code2 = await player.textContent('#code');
   await friend.fill('#join-code', `Join my session: https://x.github.io/gameguide/join/?code=${code2.toLowerCase()} or type ${code2}`);

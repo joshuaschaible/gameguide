@@ -464,3 +464,41 @@ body.viewer-mode #viewing { grid-column: 1; justify-self: start; min-width: 0; }
 body.viewer-mode #tools { grid-column: 2; }
 body.viewer-mode .top-right { grid-column: 3; justify-self: end; }
 .set-block .check-row + .check-row { margin-top: 10px; }
+
+/* ---------- source picker (Discord-style) ---------- */
+.picker { background: var(--bg-2); border-radius: 12px; padding: 12px; margin-top: 12px; }
+dialog .picker { background: transparent; padding: 0; margin-top: 8px; }
+.picker-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; background: var(--bg-3); border-radius: 10px; padding: 4px; }
+.picker-tabs button { height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 15px; font-weight: 600; border-radius: 7px; }
+.picker-tabs button:hover { color: var(--text-strong); background: var(--hover); }
+.picker-tabs button.on { color: var(--text-strong); background: var(--bg); box-shadow: 0 1px 2px rgba(0, 0, 0, .2); }
+.picker-tabs .ic { width: 18px; height: 18px; }
+.picker-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px; margin-top: 16px; max-height: 58vh; overflow-y: auto; padding: 2px 4px 2px 2px; }
+.picker-empty { grid-column: 1 / -1; text-align: center; padding: 30px 0; }
+.pick { display: flex; flex-direction: column; gap: 8px; padding: 0; text-align: left; background: none; border-radius: 10px; }
+.pick-shot { position: relative; display: block; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 2px transparent; transition: box-shadow .15s; }
+.pick-shot img { width: 100%; height: 100%; object-fit: contain; display: block; transition: filter .15s; }
+.pick-go {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.96); opacity: 0;
+  background: #fff; color: #111214; font-size: 14px; font-weight: 600; padding: 10px 22px; border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35); transition: opacity .15s, transform .15s; pointer-events: none; white-space: nowrap;
+}
+.pick:hover .pick-shot, .pick:focus-visible .pick-shot { box-shadow: 0 0 0 2px var(--muted); }
+.pick:hover .pick-shot img, .pick:focus-visible .pick-shot img { filter: brightness(.6); }
+.pick:hover .pick-go, .pick:focus-visible .pick-go { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.pick:focus-visible { outline: none; }
+.pick.likely-game .pick-shot { box-shadow: 0 0 0 2px var(--accent); }
+.pick-shot .likely { position: absolute; left: 8px; top: 8px; }
+.pick-meta { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 2px; color: var(--text-strong); }
+.pick-meta .ic { width: 18px; height: 18px; color: var(--icon); }
+.pick-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
+.picker-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding: 0 4px; }
+.picker-sum { display: flex; flex-direction: column; gap: 2px; }
+.picker-sum strong { font-size: 15px; color: var(--text-strong); }
+.picker-sum span { font-size: 13px; color: var(--muted); }
+.picker-gear { width: 40px; height: 40px; background: var(--btn-2); color: var(--btn-2-text); }
+.picker-gear:hover, .picker-gear[aria-expanded="true"] { background: var(--btn-2-hover); color: var(--btn-2-text); }
+.picker-quality { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; padding: 12px; background: var(--bg-3); border-radius: 8px; }
+.picker-quality label { display: flex; flex-direction: column; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); }
+.picker-quality select { background: var(--bg); }
+dialog.wide .dialog-sources { max-height: none; overflow: visible; }

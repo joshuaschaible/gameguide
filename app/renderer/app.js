@@ -836,53 +836,131 @@
       box.innerHTML = `<p class="note">Nothing to share found. If you are on a Mac, allow Screen Recording for ${NAME}, then quit and reopen the app.</p>`;
       return { permProblem: true };
     }
-    const groups = [
-      { title: 'Games & apps', hint: 'Only this window is shared. Drawings follow it around.', items: res.sources.filter((x) => x.kind === 'window') },
-      { title: 'Whole screen', hint: 'Everything on the screen is shared.', items: res.sources.filter((x) => x.kind === 'screen') },
+    // Discord-style picker: tabs, big previews, quality summary at the bottom.
+    const tabs = [
+      { key: 'window', label: 'Applications', icon: 'app-window', items: res.sources.filter((x) => x.kind === 'window') },
+      { key: 'screen', label: 'Entire Screen', icon: 'monitor', items: res.sources.filter((x) => x.kind === 'screen') },
     ];
-    for (const g of groups) {
-      if (!g.items.length) continue;
-      const head = document.createElement('div');
-      head.className = 'src-group';
-      head.innerHTML = '<strong></strong><span></span>';
-      head.querySelector('strong').textContent = g.title;
-      head.querySelector('span').textContent = g.hint;
-      box.appendChild(head);
-      const grid = document.createElement('div');
-      grid.className = 'sources';
-      for (const src of g.items) {
+    let tab = S.pickerTab && tabs.find((t) => t.key === S.pickerTab && t.items.length) ? S.pickerTab : (tabs[0].items.length ? 'window' : 'screen');
+    const wrap = document.createElement('div');
+    wrap.className = 'picker';
+    const bar = document.createElement('div');
+    bar.className = 'picker-tabs';
+    bar.setAttribute('role', 'tablist');
+    const grid = document.createElement('div');
+    grid.className = 'picker-grid';
+    const drawGrid = () => {
+      grid.replaceChildren();
+      bar.querySelectorAll('button').forEach((b) => { const on = b.dataset.tab === tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+      const t = tabs.find((x) => x.key === tab);
+      if (!t.items.length) {
+        const p = document.createElement('p');
+        p.className = 'note picker-empty';
+        p.textContent = tab === 'window' ? 'No open apps found. Open your game, then click Refresh.' : 'No screens found.';
+        grid.appendChild(p);
+        return;
+      }
+      for (const src of t.items) {
         const b = document.createElement('button');
-        b.className = src.likelyGame ? 'source likely-game' : 'source';
+        b.type = 'button';
+        b.className = src.likelyGame ? 'pick likely-game' : 'pick';
         b.title = src.name;
+        const shot = document.createElement('span');
+        shot.className = 'pick-shot';
+        if (src.thumb) {
+          const img = document.createElement('img');
+          img.alt = '';
+          img.src = src.thumb;
+          shot.appendChild(img);
+        }
         if (src.likelyGame) {
           const tag = document.createElement('span');
           tag.className = 'likely';
           iconText(tag, 'star', 'Looks like your game');
-          b.appendChild(tag);
+          shot.appendChild(tag);
         }
-        const img = document.createElement('img');
-        img.className = 'src-thumb';
-        img.alt = '';
-        img.src = src.thumb;
-        b.appendChild(img);
+        const go = document.createElement('span');
+        go.className = 'pick-go';
+        go.textContent = src.kind === 'screen' ? 'Share Screen' : 'Share Window';
+        shot.appendChild(go);
+        b.appendChild(shot);
         const label = document.createElement('span');
-        label.className = 'src-label';
+        label.className = 'pick-meta';
         if (src.icon) {
           const ic = document.createElement('img');
           ic.className = 'src-icon';
           ic.alt = '';
           ic.src = src.icon;
           label.appendChild(ic);
+        } else {
+          label.appendChild(icon(src.kind === 'screen' ? 'monitor' : 'app-window'));
         }
-        const t = document.createElement('strong');
-        t.textContent = src.name;
-        label.appendChild(t);
+        const name = document.createElement('span');
+        name.className = 'pick-name';
+        name.textContent = src.name;
+        label.appendChild(name);
         b.appendChild(label);
         b.addEventListener('click', () => onPick(src));
         grid.appendChild(b);
       }
-      box.appendChild(grid);
+    };
+    for (const t of tabs) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.tab = t.key;
+      b.setAttribute('role', 'tab');
+      b.append(icon(t.icon), document.createTextNode(t.label));
+      b.addEventListener('click', () => { tab = t.key; S.pickerTab = tab; drawGrid(); });
+      bar.appendChild(b);
     }
+    // Footer: current quality, gear to change it right here.
+    const foot = document.createElement('div');
+    foot.className = 'picker-foot';
+    const sum = document.createElement('div');
+    sum.className = 'picker-sum';
+    const sumTitle = document.createElement('strong');
+    const sumLine = document.createElement('span');
+    sum.append(sumTitle, sumLine);
+    const gear = document.createElement('button');
+    gear.type = 'button';
+    gear.className = 'icon-btn picker-gear';
+    gear.title = 'Stream quality';
+    gear.setAttribute('aria-expanded', 'false');
+    gear.appendChild(icon('gear'));
+    const qbox = document.createElement('div');
+    qbox.className = 'picker-quality';
+    qbox.hidden = true;
+    const mkSel = (labelText, srcId) => {
+      const l = document.createElement('label');
+      l.textContent = labelText;
+      const sel = document.createElement('select');
+      sel.innerHTML = $(srcId).innerHTML;
+      sel.value = $(srcId).value;
+      sel.addEventListener('change', () => {
+        $(srcId).value = sel.value;
+        $(srcId).dispatchEvent(new Event('change')); // same save path as stream settings
+        paintSum();
+      });
+      l.appendChild(sel);
+      return l;
+    };
+    qbox.append(mkSel('Resolution', 'q-res'), mkSel('Frame rate', 'q-fps'), mkSel('Prefer', 'q-prefer'));
+    const paintSum = () => {
+      const q = quality();
+      const pref = { balanced: 'Balanced', sharp: 'Sharper video', smooth: 'Smoother video' }[q.prefer] || 'Balanced';
+      const res = q.res === 'native' ? 'Native' : `${q.res}p`;
+      sumTitle.textContent = 'Stream quality';
+      sumLine.textContent = `${pref} · ${res} · ${q.fps}fps`;
+    };
+    gear.addEventListener('click', () => {
+      qbox.hidden = !qbox.hidden;
+      gear.setAttribute('aria-expanded', qbox.hidden ? 'false' : 'true');
+    });
+    paintSum();
+    foot.append(sum, gear);
+    wrap.append(bar, grid, qbox, foot);
+    box.appendChild(wrap);
+    drawGrid();
     return { permProblem };
   }
 

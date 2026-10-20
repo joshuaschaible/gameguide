@@ -29,9 +29,9 @@ const path = require('path');
   await win.evaluate(() => { localStorage.setItem('app.onboarded', 'true'); const d = document.getElementById('welcome'); if (d.open) d.close(); });
   if (await win.isVisible('#step-name')) { await win.fill('#name', 'Tester'); await win.click('#name-form button'); }
   await win.click('#go-share');
-  await win.waitForSelector('.source', { timeout: 15000 }).catch(() => {});
+  await win.waitForSelector('.pick', { timeout: 15000 }).catch(() => {});
   console.log('sources html:', (await win.innerHTML('#sources')).slice(0, 200));
-  const n = await win.locator('.source').count();
+  const n = await win.locator('.pick').count();
   console.log('source buttons', n);
   // ---- avatar upload through the real button (real CSP + preload) ----
   await win.click('#open-settings');
@@ -51,7 +51,7 @@ const path = require('path');
   console.log('system decoder fallback:', sys ? `${sys.slice(0, 23)}… ${sys.length} chars` : sys);
   await win.keyboard.press('Escape');
   if (n) {
-    await win.click('.source');
+    await win.click('.pick');
     await win.waitForTimeout(4000);
     console.log('share status:', await win.textContent('#share-status'));
     const wins = app.windows();

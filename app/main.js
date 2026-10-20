@@ -178,7 +178,7 @@ async function listSources() {
   try {
     sources = await desktopCapturer.getSources({
       types: ['window', 'screen'],
-      thumbnailSize: { width: 400, height: 225 },
+      thumbnailSize: { width: 640, height: 360 }, // big previews, like Discord's picker
       fetchWindowIcons: true,
     });
   } catch (err) {
@@ -190,7 +190,7 @@ async function listSources() {
   const out = [];
   for (const s of sources) {
     const isScreen = s.id.startsWith('screen:');
-    const thumb = s.thumbnail && !s.thumbnail.isEmpty() ? s.thumbnail.toDataURL() : '';
+    const thumb = s.thumbnail && !s.thumbnail.isEmpty() ? `data:image/jpeg;base64,${s.thumbnail.toJPEG(82).toString('base64')}` : '';
     if (isScreen) {
       screenIdx += 1;
       const d = displays.find((x) => String(x.id) === String(s.display_id));
