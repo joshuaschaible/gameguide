@@ -37,7 +37,7 @@
     <!-- drawing tools: shown here while watching -->
     <div id="tools" class="tools" hidden>
       <div id="color-wrap" class="pop-wrap color-wrap">
-        <button id="color-btn" class="tool color-btn" title="Color" aria-haspopup="true" aria-expanded="false"><span id="color-current" class="swatch"></span></button>
+        <button id="color-btn" class="tool color-btn" title="Color" aria-haspopup="true" aria-expanded="false"><span id="color-current" class="swatch"></span>Color</button>
         <div id="color-menu" class="popover color-menu">
           <div class="swatches" role="group" aria-label="Color">
           <button class="swatch active" data-color="#ff3b6b" title="Red"></button>
@@ -224,22 +224,6 @@
     </div>
   </section>
 
-  <!-- 3a. pick screen -->
-  <section id="step-pick" class="step" hidden>
-    <p class="eyebrow">Share my game</p>
-    <h1>What do you want to share?</h1>
-    <p class="note">Pick your game to share just that window, or share a whole screen. You can switch any time.</p>
-    <div id="perm" class="warn" hidden>
-      <p><b>Screen Recording permission needed.</b> In System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, turn on <b><span data-brand></span></b>, then quit and reopen <span data-brand></span>.</p>
-      <button id="open-perm" class="ghost small">Open System Settings</button>
-    </div>
-    <div id="sources" class="source-picker"></div>
-    <div class="row gap">
-      <button id="pick-back" class="ghost"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg>Back</button>
-      <button id="pick-refresh" class="ghost">Refresh</button>
-    </div>
-  </section>
-
   <!-- 3b. sharing: the shared source fills the window, controls are in the header -->
   <section id="step-share" class="watch share-view waiting" hidden>
     <div id="share-stage" class="stage">
@@ -318,14 +302,12 @@
   </div>
 </dialog>
 
-<dialog id="source-dialog" class="wide">
-  <h2>Change source</h2>
-  <p class="note">Your friend stays connected and sees the new source right away.</p>
-  <div id="dialog-sources" class="dialog-sources"></div>
-  <div class="row gap end">
-    <button id="dialog-refresh" class="ghost">Refresh</button>
-    <button id="dialog-cancel" class="ghost">Cancel</button>
+<dialog id="source-dialog" class="wide picker-dialog" aria-label="Choose what to share">
+  <div id="perm" class="warn" hidden>
+    <p><b>Screen Recording permission needed.</b> In System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, turn on <b><span data-brand></span></b>, then quit and reopen <span data-brand></span>.</p>
+    <button id="open-perm" class="ghost small">Open System Settings</button>
   </div>
+  <div id="dialog-sources" class="dialog-sources"></div>
 </dialog>
 
 <dialog id="details">

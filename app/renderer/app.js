@@ -80,7 +80,7 @@
   }
 
   // ---------- views ----------
-  const STEPS = ['step-name', 'step-role', 'step-pick', 'step-share', 'step-join', 'step-watch'];
+  const STEPS = ['step-name', 'step-role', 'step-share', 'step-join', 'step-watch'];
   function show(id) {
     for (const s of STEPS) $(s).hidden = s !== id;
     $('end').hidden = !['step-share', 'step-watch'].includes(id) && !(id === 'step-join' && !S.ended);
@@ -825,7 +825,8 @@
   // PLAYER: share my game
   // =====================================================================
   // Renders the source picker into `box`. onPick(source) is called on click.
-  async function renderSources(box, onPick) {
+  async function renderSources(box, onPick, opts) {
+    opts = opts || {};
     box.innerHTML = '<p class="note">Looking for games, apps and screens…</p>';
     let res;
     try { res = await bridge.listSources(); } catch (e) { res = { sources: [], error: String(e) }; }
@@ -957,16 +958,31 @@
       gear.setAttribute('aria-expanded', qbox.hidden ? 'false' : 'true');
     });
     paintSum();
-    foot.append(sum, gear);
+    const right = document.createElement('div');
+    right.className = 'picker-actions';
+    if (opts.onRefresh) {
+      const rf = document.createElement('button');
+      rf.type = 'button';
+      rf.className = 'icon-btn picker-gear';
+      rf.title = 'Refresh the list';
+      rf.appendChild(icon('refresh'));
+      rf.addEventListener('click', opts.onRefresh);
+      right.appendChild(rf);
+    }
+    right.appendChild(gear);
+    if (opts.onCancel) {
+      const cx = document.createElement('button');
+      cx.type = 'button';
+      cx.className = 'ghost picker-cancel';
+      cx.textContent = 'Cancel';
+      cx.addEventListener('click', opts.onCancel);
+      right.appendChild(cx);
+    }
+    foot.append(sum, right);
     wrap.append(bar, grid, qbox, foot);
     box.appendChild(wrap);
     drawGrid();
     return { permProblem };
-  }
-
-  async function loadSources() {
-    const r = await renderSources($('sources'), (src) => startSharing(src));
-    $('perm').hidden = !(r && r.permProblem);
   }
 
   // Starts capturing one source. Returns the new stream (not yet in use).
@@ -1064,7 +1080,7 @@
       return;
     }
     setStatus($('share-status'), `"${source.name}" closed. Pick another source to keep sharing.`, 'bad');
-    openSourceDialog();
+    openSourceDialog('switch');
   }
 
   async function replaceCapture(source, silent) {
@@ -1111,10 +1127,17 @@
     setStatus($('share-status'), S.conn && S.conn.open ? `Now sharing "${source.name}". ${S.friend || 'Your friend'} sees it.` : `Now sharing "${source.name}".`, 'good');
   }
 
-  function openSourceDialog() {
+  // One picker for both: starting to share, and switching mid-stream.
+  let pickerMode = 'start';
+  async function openSourceDialog(mode) {
+    if (mode === 'start' || mode === 'switch') pickerMode = mode;
     const dlg = $('source-dialog');
-    renderSources($('dialog-sources'), (src) => { dlg.close(); switchSource(src); });
     if (!dlg.open) dlg.showModal();
+    const r = await renderSources($('dialog-sources'), (src) => {
+      dlg.close();
+      if (pickerMode === 'start') startSharing(src); else switchSource(src);
+    }, { onRefresh: () => openSourceDialog(), onCancel: () => dlg.close() });
+    $('perm').hidden = !(r && r.permProblem);
   }
 
   function makeCode() {
@@ -1996,6 +2019,9 @@
     store.set('app.color', color);
     document.querySelectorAll('.swatch[data-color]').forEach((x) => x.classList.toggle('active', x.dataset.color.toLowerCase() === color));
     $('color-current').style.setProperty('--c', color);
+    // White/black would vanish into the bar in one of the themes: give just those a hairline.
+    $('color-current').classList.toggle('light-swatch', color === '#ffffff');
+    $('color-current').classList.toggle('dark-swatch', color === '#111111');
     const name = document.querySelector(`.swatch[data-color="${color}"]`);
     $('color-btn').title = `Color: ${name ? name.title : color} (click for more)`;
   }
@@ -2136,7 +2162,7 @@
     }
     show('step-role');
   });
-  $('go-share').addEventListener('click', () => { $('role-note').hidden = true; show('step-pick'); loadSources(); });
+  $('go-share').addEventListener('click', () => { $('role-note').hidden = true; openSourceDialog('start'); });
   $('go-join').addEventListener('click', () => {
     $('role-note').hidden = true;
     show('step-join');
@@ -2144,8 +2170,6 @@
     $('join-btn').disabled = false;
     $('join-code').focus();
   });
-  $('pick-back').addEventListener('click', () => show('step-role'));
-  $('pick-refresh').addEventListener('click', loadSources);
   $('open-perm').addEventListener('click', () => bridge.openScreenSettings());
   function inviteText(code) {
     const base = S.info.inviteBase;
@@ -2176,7 +2200,7 @@
     await bridge.copy(S.code);
     flashCopied($('copy-code-2'));
   });
-  $('change-source').addEventListener('click', openSourceDialog);
+  $('change-source').addEventListener('click', () => openSourceDialog('switch'));
 
   // Draws a sample mark on the player's own screen (overlay check).
   $('test-draw').addEventListener('click', () => {
@@ -2247,8 +2271,12 @@
     if (bridge.setFocusOnly) bridge.setFocusOnly($('focus-only').checked);
     log(`drawings only while the game is in front: ${$('focus-only').checked ? 'on' : 'off'}`);
   });
-  $('dialog-refresh').addEventListener('click', openSourceDialog);
-  $('dialog-cancel').addEventListener('click', () => $('source-dialog').close());
+  // Click outside the picker closes it (like Discord).
+  $('source-dialog').addEventListener('click', (e) => {
+    if (e.target !== $('source-dialog')) return;
+    const r = $('source-dialog').getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) $('source-dialog').close();
+  });
   if (bridge.onOverlayTrack) {
     bridge.onOverlayTrack(({ state, detail }) => {
       const prev = S.trackState;
@@ -2497,8 +2525,8 @@
         || (want.kind === 'screen' ? list.find((x) => x.kind === 'screen') : null);
       if (!src) {
         log('could not find the shared window after the update');
-        show('step-pick');
-        loadSources();
+        show('step-role');
+        openSourceDialog('start');
         return true;
       }
       await startSharing(src, { code: r.code });

@@ -30,9 +30,10 @@ const path = require('path');
   if (await win.isVisible('#step-name')) { await win.fill('#name', 'Tester'); await win.click('#name-form button'); }
   await win.click('#go-share');
   await win.waitForSelector('.pick', { timeout: 15000 }).catch(() => {});
-  console.log('sources html:', (await win.innerHTML('#sources')).slice(0, 200));
+  console.log('sources html:', (await win.innerHTML('#dialog-sources')).slice(0, 200));
   const n = await win.locator('.pick').count();
   console.log('source buttons', n);
+  await win.evaluate(() => document.getElementById('source-dialog').close());
   // ---- avatar upload through the real button (real CSP + preload) ----
   await win.click('#open-settings');
   const avInput = win.locator('#avatar-picker-settings input[type=file]');
@@ -51,6 +52,9 @@ const path = require('path');
   console.log('system decoder fallback:', sys ? `${sys.slice(0, 23)}… ${sys.length} chars` : sys);
   await win.keyboard.press('Escape');
   if (n) {
+    await win.evaluate(() => document.querySelectorAll('dialog[open]').forEach((d) => d.close()));
+    await win.click('#go-share');
+    await win.waitForSelector('.pick', { timeout: 15000 });
     await win.click('.pick');
     await win.waitForTimeout(4000);
     console.log('share status:', await win.textContent('#share-status'));

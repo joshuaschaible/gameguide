@@ -75,7 +75,7 @@ const stub = (name) => `
   await player.hover('.pick');
   await player.waitForTimeout(250);
   await player.screenshot({ path: '/tmp/claude-0/ui-picker.png' });
-  await player.click('.picker-gear');
+  await player.click('.picker-gear[title="Stream quality"]');
   await player.screenshot({ path: '/tmp/claude-0/ui-picker-quality.png' });
   await player.click('.pick');
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });

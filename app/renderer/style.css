@@ -502,3 +502,16 @@ dialog .picker { background: transparent; padding: 0; margin-top: 8px; }
 .picker-quality label { display: flex; flex-direction: column; gap: 6px; margin: 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); }
 .picker-quality select { background: var(--bg); }
 dialog.wide .dialog-sources { max-height: none; overflow: visible; }
+
+/* picker lives in a modal now */
+dialog.picker-dialog { width: min(980px, 94vw); padding: 16px; }
+dialog.picker-dialog .picker { margin-top: 0; }
+dialog.picker-dialog .warn { margin: 0 0 12px; }
+.picker-actions { display: flex; align-items: center; gap: 8px; }
+.picker-cancel { height: 40px; }
+
+/* color: swatch + label, like the other tools */
+.top .color-btn { width: auto; padding: 0 10px; }
+.color-btn .swatch, .top .color-btn .swatch { width: 16px; height: 16px; border: 0; box-shadow: none; flex: none; }
+.color-btn .swatch.light-swatch { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25); }
+.color-btn .swatch.dark-swatch { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); }
