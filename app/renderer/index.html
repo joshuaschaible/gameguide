@@ -11,7 +11,7 @@
 <body>
 <svg class="sprite" aria-hidden="true" focusable="false">
   <symbol id="i-pen" viewBox="0 0 256 256"><path d="M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM192,108.68,147.31,64l24-24L216,84.68Z"/></symbol>
-  <symbol id="i-pin" viewBox="0 0 256 256"><path d="M128,16a88.1,88.1,0,0,0-88,88c0,75.3,80,132.17,83.41,134.55a8,8,0,0,0,9.18,0C136,236.17,216,179.3,216,104A88.1,88.1,0,0,0,128,16Zm0,56a32,32,0,1,1-32,32A32,32,0,0,1,128,72Z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 256 256"><path d="M124,175a8,8,0,0,0,7.94,0c2.45-1.41,60-35,60-94.95A64,64,0,0,0,64,80C64,140,121.58,173.54,124,175ZM128,56a24,24,0,1,1-24,24A24,24,0,0,1,128,56ZM240,184c0,31.18-57.71,48-112,48S16,215.18,16,184c0-14.59,13.22-27.51,37.23-36.37a8,8,0,0,1,5.54,15C42.26,168.74,32,176.92,32,184c0,13.36,36.52,32,96,32s96-18.64,96-32c0-7.08-10.26-15.26-26.77-21.36a8,8,0,0,1,5.54-15C226.78,156.49,240,169.41,240,184Z"/></symbol>
   <symbol id="i-eraser" viewBox="0 0 256 256"><path d="M225,80.4,183.6,39a24,24,0,0,0-33.94,0L31,157.66a24,24,0,0,0,0,33.94l30.06,30.06A8,8,0,0,0,66.74,224H216a8,8,0,0,0,0-16h-84.7L225,114.34A24,24,0,0,0,225,80.4ZM213.67,103,160,156.69,107.31,104,161,50.34a8,8,0,0,1,11.32,0l41.38,41.38a8,8,0,0,1,0,11.31Z"/></symbol>
   <symbol id="i-smile-plus" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM92,96a12,12,0,1,1-12,12A12,12,0,0,1,92,96Zm82.92,60c-10.29,17.79-27.39,28-46.92,28s-36.63-10.2-46.92-28a8,8,0,1,1,13.84-8c7.47,12.91,19.21,20,33.08,20s25.61-7.1,33.08-20a8,8,0,1,1,13.84,8ZM164,120a12,12,0,1,1,12-12A12,12,0,0,1,164,120Z"/></symbol>
   <symbol id="i-monitor" viewBox="0 0 256 256"><path d="M232,64V176a24,24,0,0,1-24,24H48a24,24,0,0,1-24-24V64A24,24,0,0,1,48,40H208A24,24,0,0,1,232,64ZM160,216H96a8,8,0,0,0,0,16h64a8,8,0,0,0,0-16Z"/></symbol>
@@ -40,16 +40,17 @@
 </svg>
 <header class="top">
   <div class="top-left">
-    <div id="viewing" class="viewing" hidden title="What your friend is sharing"><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg><span id="viewing-name"></span></div>
+    <div id="viewer-left" class="viewer-left">
+    <div id="viewing" class="viewing" hidden title="What your friend is sharing"><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg><span id="viewing-name"></span></div></div>
     <!-- drawing tools: shown here while watching -->
     <div id="tools" class="tools" hidden>
       <div id="tool-wrap" class="pop-wrap">
-        <button id="tool-btn" class="tool active tool-current" aria-haspopup="true" aria-expanded="false" title="Tool"><span id="tool-icon"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg></span><span id="tool-name">Draw</span><span class="caret"><svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></button>
+        <button id="tool-btn" class="tool tool-current" aria-haspopup="true" aria-expanded="false" title="Tool"><span id="tool-icon"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg></span><span id="tool-name">Marker</span><span class="caret"><svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></button>
         <div id="tool-menu" class="popover tool-menu" role="menu">
-          <button class="tool-opt active" data-tool="pen" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg><span>Draw</span><kbd>P</kbd></button>
+          <button class="tool-opt active" data-tool="pen" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg><span>Marker</span><kbd>M</kbd></button>
           <button class="tool-opt" data-tool="arrow" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-arrow"/></svg><span>Arrow</span><kbd>A</kbd></button>
           <button class="tool-opt" data-tool="ping" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg><span>Ping</span><kbd>O</kbd></button>
-          <button class="tool-opt" data-tool="laser" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-laser"/></svg><span>Laser pointer</span><kbd>L</kbd></button>
+          <button class="tool-opt" data-tool="laser" role="menuitemradio"><svg class="ic" aria-hidden="true"><use href="#i-laser"/></svg><span>Cursor</span><kbd>C</kbd></button>
         </div>
       </div>
       <div id="color-wrap" class="pop-wrap color-wrap">
@@ -78,6 +79,7 @@
     <!-- streamer controls: shown here while sharing -->
     <div id="share-tools" class="tools" hidden>
       <button id="change-source" class="tool source-btn" title="Change what you're sharing"><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg><span id="source-name" class="source-name"></span> <span class="caret"><svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></button>
+      <button id="preview-toggle" class="icon-btn" hidden title="Hide my stream preview (saves resources)" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></button>
     </div>
   </div>
   <div class="top-right">
@@ -114,7 +116,6 @@
         </div>
       </div>
     </div>
-    <button id="preview-toggle" class="icon-btn" hidden title="Hide my stream preview (saves resources)" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></button>
     <button id="end" class="danger small" hidden>End session</button>
     <div id="me-wrap" class="pop-wrap">
       <button id="me-btn" class="me-btn" aria-haspopup="true" aria-expanded="false" title="You"><span id="me-avatar"></span></button>
@@ -239,7 +240,7 @@
   <div class="slide" data-slide="2" hidden>
     <div class="slide-icon"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg></div>
     <h2>Draw on their game</h2>
-    <p>Pick a tool: <b>Draw</b>, <b>Arrow</b>, <b>Ping</b> or <b>Laser pointer</b> (it follows your mouse live). Your marks show up on top of their game and fade after a few seconds. Scroll over the stream to zoom in; right-drag to move around.</p>
+    <p>Pick a tool: <b>Marker</b>, <b>Arrow</b>, <b>Ping</b> or <b>Cursor</b> (your mouse, shown live). Your marks show up on top of their game and fade after a few seconds. Scroll over the stream to zoom in; right-drag to move around.</p>
     <p>Sharing? Open stream settings (the sliders button) and click <b>Test drawing</b> to see what your friend's marks will look like.</p>
   </div>
   <div class="welcome-foot">

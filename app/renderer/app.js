@@ -94,6 +94,9 @@
     updateConn();
     showViewing();
     document.body.classList.toggle('viewer-mode', id === 'step-watch');
+    // Viewer: the streamer's avatar sits left of what they're sharing.
+    if (id === 'step-watch') { if ($('people').parentElement.id !== 'viewer-left') $('viewer-left').insertBefore($('people'), $('viewing')); }
+    else if ($('people').parentElement.id === 'viewer-left') $('invite-wrap').before($('people'));
     if (S.previewReady) updatePreview();
   }
   // Who's here: overlapping avatars; hover or click shows a list with names,
@@ -215,7 +218,7 @@
     const src = S.role === 'join' && S.peerSource;
     const on = !!src && !$('step-watch').hidden;
     $('viewing').hidden = !on;
-    if (on) $('viewing-name').textContent = `Viewing ${src.name || (src.kind === 'screen' ? 'Whole screen' : 'shared window')}`;
+    if (on) $('viewing-name').textContent = src.name || (src.kind === 'screen' ? 'Whole screen' : 'Shared window');
   }
   function bumpProfile() { S.profileVer = Date.now(); store.set('app.profileVer', S.profileVer); }
   // Control messages go on every open path (drawing link + video connection).
@@ -1096,7 +1099,7 @@
   }
 
   function showSourceName(source) {
-    $('source-name').textContent = `Sharing ${source.name}`;
+    $('source-name').textContent = source.name;
     if (S.role === 'share') sendCtl(myProfileMsg()); // tell the viewer what's shared now
   }
 
@@ -2245,7 +2248,7 @@
   document.addEventListener('keyup', (ev) => { if (ev.code === 'Space') { spaceDown = false; canvas.classList.remove('can-pan'); } });
 
   // One "Tool" dropdown: Draw (default), Arrow, Ping, Laser pointer.
-  const TOOL_NAMES = { pen: 'Draw', arrow: 'Arrow', ping: 'Ping', laser: 'Laser pointer' };
+  const TOOL_NAMES = { pen: 'Marker', arrow: 'Arrow', ping: 'Ping', laser: 'Cursor' };
   const TOOL_ICONS = { pen: 'pen', arrow: 'arrow', ping: 'pin', laser: 'laser' };
   function setTool(tool) {
     if (!TOOL_NAMES[tool]) tool = 'pen';
@@ -2390,12 +2393,12 @@
   document.addEventListener('keydown', (ev) => {
     if ($('step-watch').hidden || ev.target.tagName === 'INPUT') return;
     const k = ev.key.toLowerCase();
-    if (k === 'p') setTool('pen');
+    if (k === 'm' || k === 'p') setTool('pen'); // M (P kept for old habits)
     if (k === 'a') setTool('arrow');
     if (k === 'o') setTool('ping');
-    if (k === 'l') setTool('laser');
+    if (k === 'c' || k === 'l') setTool('laser'); // C (L kept for old habits)
     if (k === '0') resetZoom();
-    if (k === 'e' || k === 'c') send({ t: 'clear' });
+    if (k === 'e') send({ t: 'clear' });
     if (k === 'escape') setReactMenu(false);
     const n = Number(ev.key);
     if (n >= 1 && n <= REACTIONS.length && !ev.ctrlKey && !ev.metaKey && !ev.altKey) sendReaction(REACTIONS[n - 1]);

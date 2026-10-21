@@ -465,7 +465,7 @@ kbd { background: var(--bg-3); border-radius: 4px; padding: 1px 6px; box-shadow:
 /* viewer bar: what's shared on the left, drawing tools centered, people/settings right */
 body.viewer-mode .top { display: grid; grid-template-columns: 1fr auto 1fr; }
 body.viewer-mode .top-left { display: contents; }
-body.viewer-mode #viewing { grid-column: 1; justify-self: start; min-width: 0; }
+body.viewer-mode #viewer-left { grid-column: 1; justify-self: start; min-width: 0; }
 body.viewer-mode #tools { grid-column: 2; }
 body.viewer-mode .top-right { grid-column: 3; justify-self: end; }
 .set-block .check-row + .check-row { margin-top: 10px; }
@@ -634,3 +634,10 @@ dialog.confirm .note { margin: 0; }
 .picker-quality { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .picker-none { padding: 40px 10px; text-align: center; }
 .picker-foot { min-height: 40px; }
+
+/* viewer: streamer's avatar + what they share, on the left */
+.viewer-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.viewer-left .viewing { padding-left: 4px; }
+.viewer-left .popover { left: 0; right: auto; }
+/* streamer: preview toggle sits right after the source button */
+#share-tools { gap: 4px; }
