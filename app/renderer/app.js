@@ -297,14 +297,17 @@
     S.peerHb = false;
     S.awaitRelink = null;
     S.native = null;
-    try { S.call && S.call.close(); } catch { /* ignore */ }
-    // Say goodbye on the drawing link (so the other side ends right away
-    // instead of trying to rebuild it), then close a moment later.
+    // Say goodbye on both paths (so the other side ends right away instead of
+    // trying to rebuild the link, even if one path is already dead), then close
+    // everything a moment later so the goodbye gets out first.
     const conn = S.conn;
     const peer = S.peer;
+    const call = S.call;
     let bye = false;
     try { if (conn && conn.open) { conn.send({ t: 'bye' }); bye = true; } } catch { /* ignore */ }
+    try { if (S.drawDc && S.drawDc.readyState === 'open') { S.drawDc.send(JSON.stringify({ t: 'bye' })); bye = true; } } catch { /* ignore */ }
     const finish = () => {
+      try { call && call.close(); } catch { /* ignore */ }
       try { conn && conn.close(); } catch { /* ignore */ }
       try { peer && peer.destroy(); } catch { /* ignore */ }
     };
@@ -1289,7 +1292,9 @@
         let m = null;
         try { m = JSON.parse(ev.data); } catch { return; }
         if (!m || typeof m !== 'object') return;
+        if (S.role === 'share') S.lastHeardAny = Date.now();
         if (S.role === 'share' && DRAW_TYPES.includes(m.t)) { receiveDraw(m); return; }
+        if (S.role === 'share' && m.t === 'bye') { friendSaidBye(); return; }
         handleCtl(m);
       };
     } catch (e) {
@@ -1376,7 +1381,7 @@
     conn.on('open', () => {
       clearTimeout(openTimer);
       S.friend = viewerName;
-      S.lastHeard = Date.now();
+      S.lastHeard = S.lastHeardAny = Date.now();
       S.peerHb = false;
       startHeartbeat();
       log('data channel open, starting video');
@@ -1415,7 +1420,7 @@
     log('friend is reconnecting the drawing link');
     watchPc(conn.peerConnection, 'data');
     conn.on('open', () => {
-      S.lastHeard = Date.now();
+      S.lastHeard = S.lastHeardAny = Date.now();
       startHeartbeat();
       log('drawing link rebuilt');
       conn.send(myProfileMsg());
@@ -1429,11 +1434,21 @@
     conn.on('error', (e) => log(`data connection error: ${e && e.type}`));
   }
 
+  // The friend ended on purpose: close out right away (the link's own "closed"
+  // event can be slow or never come), unless they're back on a new link.
+  function friendSaidBye() {
+    if (S.conn) S.conn.byeReceived = true;
+    const was = S.conn;
+    later(1200, () => {
+      if (S.role !== 'share' || S.ended) return;
+      if ((S.conn && S.conn === was) || (!S.conn && (S.call || S.awaitRelink || S.peerProfile))) viewerGone();
+    });
+  }
   function hostData(conn, msg) {
     if (!msg || typeof msg !== 'object') return;
-    if (S.conn === conn) S.lastHeard = Date.now();
+    if (S.conn === conn) { S.lastHeard = Date.now(); S.lastHeardAny = S.lastHeard; }
     if (msg.t === 'hb') { S.peerHb = true; checkPeerPv(msg.pv); return; }
-    if (msg.t === 'bye') { conn.byeReceived = true; return; }
+    if (msg.t === 'bye') { conn.byeReceived = true; if (S.conn === conn) friendSaidBye(); return; }
     if (msg.t === 'profile?') { sendCtl(myProfileMsg()); return; }
     if (msg.t === 'hello') { takePeerProfile(msg); S.peerUpdating = false; return; }
     if (msg.t === 'updating') { S.peerUpdating = true; log('friend is installing an update'); return; }
@@ -1500,6 +1515,7 @@
   // Both sides send a tiny heartbeat on the drawing link so a silently dead
   // link is noticed within seconds (only acted on when the other side sends
   // heartbeats too, i.e. runs a version that can rebuild the link).
+  const FRIEND_GONE_MS = Number(store.get('app.friendGoneMs', 20000)) || 20000; // (tests shorten it)
   function startHeartbeat() {
     clearInterval(S.hbTimer);
     S.hbTimer = setInterval(() => {
@@ -1509,6 +1525,15 @@
         S.quietLogged = true;
         log(`no word from friend on the drawing link for ${Math.round((Date.now() - S.lastHeard) / 1000)} s`);
       } else if (!hostLinkDead()) S.quietLogged = false;
+      // Silent on every path for 20 s (app quit, laptop asleep, network gone):
+      // they're not coming back on this connection. Stop streaming to nobody.
+      if (S.role === 'share' && !S.ended && S.peerHb && !S.peerUpdating && (S.conn || S.awaitRelink || S.call)) {
+        const quiet = Date.now() - (S.lastHeardAny || S.lastHeard || Date.now());
+        if (quiet > FRIEND_GONE_MS) {
+          log(`no word from friend on any path for ${Math.round(quiet / 1000)} s; treating them as gone`);
+          viewerGone();
+        }
+      }
     }, 2000);
   }
   function stopHeartbeat() {
