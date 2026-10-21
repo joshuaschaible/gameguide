@@ -251,6 +251,32 @@
   function setStatus(el, text, kind) {
     el.textContent = text;
     el.className = `${el.classList.contains('stage-note') ? 'stage-note ' : ''}status ${kind || ''}`.trim();
+    if (el.id === 'share-status') statusToast(text, kind);
+  }
+  // Events while streaming (friend joined/left, game closed, restart…) show as a
+  // short toast instead of a line of text sitting over the video.
+  let lastToastText = '';
+  let lastToastAt = 0;
+  function statusToast(text, kind) {
+    if (!text || S.role !== 'share' || $('step-share').hidden) return;
+    if (/^(Waiting for your friend to enter|Getting your code|Starting capture)/.test(text) || / found you\. Connecting/.test(text)) return; // covered elsewhere / about to be replaced
+    if (/^Connected \(/.test(text)) return; // route detail for an already-announced join
+    const now = Date.now();
+    if (text === lastToastText && now - lastToastAt < 10000) return;
+    lastToastText = text;
+    lastToastAt = now;
+    toast(text, kind);
+  }
+  function toast(text, kind) {
+    const box = $('toasts');
+    const t = document.createElement('div');
+    t.className = `toast ${kind || ''}`.trim();
+    t.setAttribute('role', 'status');
+    t.textContent = text;
+    box.appendChild(t);
+    while (box.children.length > 2) box.firstChild.remove();
+    requestAnimationFrame(() => t.classList.add('in'));
+    setTimeout(() => { t.classList.remove('in'); setTimeout(() => t.remove(), 300); }, kind === 'bad' ? 7000 : 4000);
   }
 
   // ---------- ICE / signaling config ----------
@@ -620,21 +646,29 @@
     S.sigLevel = level;
     S.sigDetail = detail || '';
     const b = $('conn-btn');
-    b.classList.remove('sig-good', 'sig-ok', 'sig-poor', 'sig-none');
-    b.classList.add(`sig-${level}`);
-    b.title = `Connection: ${LEVEL_TEXT[level]}`;
+    // A lasting video problem turns a "good" icon yellow, so it's noticed without flashing text.
+    const shown = level === 'good' && S.role === 'share' && connIssueText() ? 'ok' : level;
+    b.classList.remove('sig-good', 'sig-ok', 'sig-poor', 'sig-none', 'has-issue');
+    b.classList.add(`sig-${shown}`);
+    if (S.role === 'share' && connIssueText()) b.classList.add('has-issue');
+    const t = `Connection: ${LEVEL_TEXT[shown]}${S.role === 'share' && connIssueText() ? ' (click for details)' : ''}`;
+    if (b.dataset.tip !== undefined) b.dataset.tip = t; else b.title = t;
     if (!$('conn-menu').classList.contains('open')) return;
     fillConnMenu();
   }
   function fillConnMenu() {
-    const lv = S.sigLevel || 'none';
+    const raw = S.sigLevel || 'none';
+    const lv = raw === 'good' && S.role === 'share' && connIssueText() ? 'ok' : raw; // match the icon
     $('conn-level').textContent = LEVEL_TEXT[lv];
     $('conn-level').className = `conn-level lv-${lv}`;
     const lines = [];
+    const problem = S.role === 'share' ? connIssueText() : '';
+    $('conn-issue').hidden = !problem;
+    $('conn-issue-text').textContent = problem;
     if (S.role === 'join') {
       lines.push($('watch-status').textContent || 'Waiting for video…');
     } else if (S.role === 'share') {
-      for (const id of ['q-stats', 'q-pipe', 'q-hint']) if ($(id).textContent) lines.push($(id).textContent);
+      for (const id of ['q-stats', 'q-pipe']) if ($(id).textContent) lines.push($(id).textContent);
     }
     if (S.sigDetail) lines.push(S.sigDetail);
     $('conn-lines').innerHTML = '';
@@ -673,22 +707,40 @@
     if (viewer) steps.push(`friend got ${r0(viewer.recv)}`, `friend shows ${r0(viewer.shown)}`);
     return `Frames per second: ${steps.join(' → ')}`;
   }
-  function bottleneck(v, viewer, q, route) {
-    if (!v || v.captureFps == null) return '';
-    const want = q.fps * 0.75;
-    if (v.captureFps < want) return `Only ${r0(v.captureFps)} new frames per second are coming from the source. If the game itself runs faster than that: share the game window instead of the whole screen, lower the resolution, or switch the game from exclusive Fullscreen to Borderless.`;
-    if (v.encodedFps != null && v.encodedFps < v.captureFps * 0.75) {
-      return v.limit === 'cpu' || v.hw === false
-        ? 'Your computer can\'t keep up with this quality. Try 30 fps or a lower resolution.'
-        : 'Some frames are being dropped. Try a lower resolution or quality.';
+  // Only problems we can detect reliably AND the player can act on. (Frame-rate
+  // based hints were dropped: a still game screen legitimately produces ~1 new
+  // frame a second, so they fired constantly for nothing.)
+  function bottleneck(v) {
+    if (!v) return null;
+    const busyEncoder = v.captureFps != null && v.captureFps >= 10 && v.encodedFps != null && v.encodedFps < v.captureFps * 0.7;
+    if (v.limit === 'cpu' || (busyEncoder && v.hw === false)) {
+      return { key: 'cpu', text: "Your computer can't keep up with this video quality. Lower the resolution or switch to 30 fps in stream settings." };
     }
-    if (v.limit === 'bandwidth') return route && route.kind === 'relay'
-      ? `You're on the slower backup connection. If you're both on the same Wi-Fi and one of you is on a Mac: System Settings > Privacy & Security > Local Network > turn on ${NAME}, then start again.`
-      : 'Your internet upload speed is the limit. Lower the quality or resolution, or plug in a network cable.';
-    if (viewer && viewer.recv != null && viewer.recv < v.fps * 0.75) return 'Some video is getting lost between you. Lower the quality, or plug in a network cable.';
-    if (viewer && viewer.shown != null && viewer.recv != null && viewer.shown < viewer.recv * 0.75) return `Your friend's computer can't display the video fast enough. They can try making the ${NAME} window smaller.`;
-    return '';
+    if (v.limit === 'bandwidth') {
+      return { key: 'bandwidth', text: 'Your internet upload is the limit, so your friend gets lower quality. Lower the resolution, or use a network cable.' };
+    }
+    return null;
   }
+  // A problem must last 10 s before it shows, and then stays at least 10 s.
+  const issue = { key: null, since: 0, shownAt: 0, text: '' };
+  function trackIssue(found) {
+    const now = Date.now();
+    if (found && found.key === issue.key) {
+      if (!issue.text && now - issue.since >= 10000) { issue.text = found.text; issue.shownAt = now; log(`video issue: ${found.key}`); updateIssue(); }
+      return;
+    }
+    if (issue.text && now - issue.shownAt < 10000) return; // keep it up long enough to read
+    const had = !!issue.text;
+    issue.key = found ? found.key : null;
+    issue.since = now;
+    issue.text = '';
+    if (had) updateIssue();
+  }
+  function connIssueText() { return issue.text || (S.netCapMbps ? `The connection kept dropping, so quality is capped at ${S.netCapMbps} Mbps for this session. Change "Max quality" in stream settings to reset it.` : ''); }
+  function updateIssue() {
+    if (S.sigLevel) setSignal(S.sigLevel, S.sigDetail);
+  }
+
   // Counts consecutive 2-second ticks where a frame counter did not move.
   const freeze = {
     last: {}, stuck: {},
@@ -736,21 +788,22 @@
           netS ? `Round trip ${netS.rtt != null ? Math.round(netS.rtt) : '–'} ms · loss ${netS.loss != null ? (netS.loss * 100).toFixed(1) : '–'}%` : '');
         updateConn();
         $('q-pipe').textContent = pipeline(v, viewer);
-        let hint = bottleneck(v, viewer, quality(), routeCache);
-        if (cf >= 3 && S.trackState !== 'minimized' && S.trackState !== 'closed') {
-          hint = 'Your game stopped sending video. Fixing it…';
-          restartCapture(`no new frames for ${cf * 2}s`);
-        } else if (cf >= 3) {
-          hint = 'Your game is minimized, so there is nothing to send. It resumes when you go back to the game.';
+        trackIssue(bottleneck(v));
+        // Still game screens produce no new frames, so "no frames" alone is
+        // not a problem. Only if the game is the active window and nothing
+        // arrives for 20 s, quietly re-grab it (at most every 3 minutes).
+        if (cf >= 10 && S.trackState === 'tracking' && Date.now() - (S.lastStillFix || 0) > 180000) {
+          S.lastStillFix = Date.now();
+          restartCapture(`no new frames for ${cf * 2}s while the game is in front`);
         } else if (f >= 2 && cf === 0) {
-          hint = 'Video got stuck. Fixing it…';
+          // Frames come in but none go out: the encoder is stuck. Fix silently.
           restartVideo(`encoder/sending stalled ${f * 2}s, capture ok`, { kind: 'encoder' });
         }
-        if (cf === 3 || f === 3) log(`freeze detected on player (capture stalled: ${cf >= 3}, send stalled: ${f >= 3}, limit: ${v && v.limit})`);
+        if (cf === 3 || f === 3) log(`player: ${cf >= 3 ? 'no new frames from the game (still screen, or capture stalled)' : 'video sending stalled'}, limit: ${v && v.limit}`);
         if (n % 5 === 0 && v) log(`stats: ${fmtStats(v, routeCache)} | ${pipeline(v, viewer)} | limit ${v.limit} | encoder ${v.encoder}`);
-        $('q-hint').textContent = hint;
-        if (S.conn && S.conn.open && n % 2 === 0) {
-          S.conn.send({ t: 'stat', cap: cf >= 3, send: f >= 3, limit: v ? v.limit : '' });
+        if (S.conn && S.conn.open) {
+          // every 2 s, so the friend knows a still picture is just a still game screen
+          S.conn.send({ t: 'stat', cap: cf >= 2, send: f >= 3, limit: v ? v.limit : '' });
         }
       } else if (S.role === 'join') {
         const v = await readVideoStats(pc, 'inbound-rtp');
@@ -771,19 +824,20 @@
           if (!S.videoDownSince) S.videoDownSince = Date.now();
           if (Date.now() - S.videoDownSince > 30000) { autoRejoin(`video connection ${vstate} for 30 s`); return; }
         } else S.videoDownSince = null;
-        const ps = S.playerStat || {};
+        // The player's last report (every ~4 s): is their game producing frames, is video going out?
+        const ps = S.playerStat && Date.now() - (S.playerStat.at || 0) < 9000 ? S.playerStat : {};
+        // A still game screen sends no new frames: that's not a freeze. Only
+        // treat it as one when the player says frames are being captured and sent.
+        const stillPicture = ps.cap === true;
         let msg = '';
-        if (f >= 5 && S.conn && S.conn.open && (f === 5 || f % 8 === 0)) {
-          // Frozen while drawings still work: ask the player to rebuild video.
+        if (f >= 5 && !stillPicture && S.conn && S.conn.open && (f === 5 || f % 8 === 0)) {
+          // Frozen while drawings still work and the player is sending: ask them to rebuild video.
           S.conn.send({ t: 'need-video', why: `no frames ${f * 2}s` });
           log(`no frames for ${f * 2}s, asked player to rebuild video`);
         }
-        if (f >= 3) {
-          msg = ps.restarting ? `${S.friend || 'Your friend'}'s video got stuck. Fixing it…`
-            : ps.cap ? `No new frames from ${S.friend || 'your friend'}'s game. If it's moving, they should switch it to Borderless / Windowed Fullscreen.`
-            : ps.send ? `${S.friend || 'Your friend'}'s computer is struggling to send video. They can lower resolution or bitrate.`
-            : routeCache && routeCache.kind === 'relay' ? 'Video paused: the connection is too slow. Waiting…'
-            : 'Video paused: no new frames arriving. Waiting…';
+        if (ps.restarting) msg = `${S.friend || 'Your friend'}'s video is restarting…`;
+        else if (f >= 3 && !stillPicture) {
+          msg = routeCache && routeCache.kind === 'relay' ? 'Video paused: the connection is too slow. Waiting…' : 'Video paused: waiting for the connection…';
           if (f === 3) log(`freeze detected on viewer (${msg})`);
         }
         $('freeze').textContent = msg;
@@ -818,7 +872,7 @@
         if (codecChanged || S.codecOverride || stuckSoftware) {
           S.codecOverride = null;
           S.encoderStalls = [];
-          $('q-hint').textContent = 'Applying… the video blinks for a second.';
+          toast('Applying… the video blinks for a second.');
           restartVideo(codecChanged ? 'codec changed in settings' : 'settings changed, getting the hardware encoder back', { kind: 'manual', force: true });
         }
       }
@@ -1608,7 +1662,7 @@
       const sent = S.lastSendMbps && S.lastSendMbps > 0.5 ? S.lastSendMbps : was;
       S.netCapMbps = Math.max(3, Math.round(Math.min(was, sent) * 0.7));
       log(`network dropped the video at ~${sent.toFixed(1)} Mbps; capping this session at ${S.netCapMbps} Mbps`);
-      $('q-hint').textContent = `The connection kept dropping, so quality is limited to ${S.netCapMbps} Mbps for this session. Change "Max quality" to reset it.`;
+      updateIssue(); // shown on the connection icon + menu
     }
     log(`rebuilding video connection (${reason})`);
     if (opts && opts.freshCapture && S.source) {
@@ -1734,7 +1788,7 @@
         if (msg.t === 'bye') { conn.byeReceived = true; return; }
         if (msg.t === 'profile?') { sendCtl(myProfileMsg()); return; }
         if (msg.t === 'hello') { S.friend = String(msg.name || '').slice(0, 24) || 'your friend'; takePeerProfile(msg); log('player said hello'); }
-        if (msg.t === 'stat') { S.playerStat = Object.assign(S.playerStat || {}, msg); return; }
+        if (msg.t === 'stat') { S.playerStat = Object.assign(S.playerStat || {}, msg, { at: Date.now() }); return; }
         if (msg.t === 'updating') {
           S.awaitReturn = { code, until: Date.now() + 120000, friend: S.friend };
           log('player is installing an update');
@@ -2478,6 +2532,7 @@
         untracked: "Can't track this window's position, so drawings may be misaligned. Share the whole screen if they are.",
       };
       $('track-note').textContent = msgs[state] || '';
+      $('q-hint').textContent = state === 'minimized' ? 'Your game is minimized, so your friend sees a still picture. It continues when you go back to the game.' : '';
       log(`overlay: ${state}${detail ? ` (${detail})` : ''}`);
     });
   }

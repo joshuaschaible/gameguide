@@ -269,12 +269,18 @@ const stub = (name) => `
   console.log('after switch, friend video', await friend.evaluate(() => [document.getElementById('video').videoWidth, document.getElementById('video').videoHeight]), await friend.textContent('#watch-status'));
   console.log('overlay target now', JSON.stringify(await player.evaluate(() => window.__overlay)));
   console.log('viewer sees source after switch:', await friend.textContent('#viewing-name')); await friend.screenshot({ path: '/tmp/claude-0/ui-viewer-bar.png', clip: { x: 0, y: 0, width: 1200, height: 60 } });
-  // simulate a stalled capture (exclusive fullscreen)
+  // a still game screen (no new frames for 14 s): not a freeze, nothing should flash or rebuild
+  const friendLogBefore = await friend.evaluate(() => window.__app.log.length);
+  const playerLogBefore = await player.evaluate(() => window.__app.log.length);
   await player.evaluate(() => clearInterval(window.__fake));
-  await player.waitForTimeout(7500);
-  console.log('player hint during stall:', await player.textContent('#q-hint'));
-  await player.waitForTimeout(6000);
-  console.log('player log restart:', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /restart/.test(l)))));
+  let pausedSeen = false;
+  for (let i = 0; i < 14; i++) { await friend.waitForTimeout(1000); if (await friend.evaluate(() => !document.getElementById('freeze').hidden)) pausedSeen = true; }
+  console.log('still screen:', JSON.stringify({
+    friendSawPaused: pausedSeen,
+    rebuildAsked: await friend.evaluate((n) => window.__app.log.slice(n).filter((l) => /asked player to rebuild/.test(l)).length, friendLogBefore),
+    captureRestarted: await player.evaluate((n) => window.__app.log.slice(n).filter((l) => /restarting capture/.test(l)).length, playerLogBefore),
+    stageHint: await player.textContent('#q-hint'),
+  }));
   // switch back to the game window, then simulate the game recreating its window
   await player.click('#change-source');
   await player.waitForSelector('#dialog-sources .pick');

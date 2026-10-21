@@ -102,6 +102,7 @@
       </button>
       <div id="conn-menu" class="popover conn-menu">
         <div class="pop-head"><span class="pop-title">Connection</span><span id="conn-level" class="conn-level"></span></div>
+        <div id="conn-issue" class="conn-issue" hidden><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg><p id="conn-issue-text"></p></div>
         <div id="conn-lines" class="conn-lines"></div>
         <span id="watch-status" hidden></span>
         <div class="pop-actions">
@@ -408,6 +409,7 @@
 </dialog>
 
 <div id="tip" class="tip" role="tooltip" hidden></div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
 
 <script src="peerjs.min.js"></script>
 <script src="marks.js"></script>

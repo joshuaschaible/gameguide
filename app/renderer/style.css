@@ -557,3 +557,16 @@ dialog.picker-dialog .warn { margin: 0 0 12px; }
 .zoom-hint { color: var(--muted); font-weight: 500; }
 .zoom-pill .ghost.small { height: 28px; }
 .tool-opt kbd { font-family: inherit; min-width: 20px; text-align: center; }
+
+/* streaming events: toasts instead of text sitting over the video */
+#share-status { display: none !important; }
+.toasts { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 4; /* under the top bar's menus */ display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; width: max-content; max-width: min(560px, 90vw); }
+.toast { background: var(--float); color: var(--text-strong); border-radius: 8px; padding: 10px 14px; font-size: 14px; font-weight: 500; line-height: 1.4; box-shadow: var(--shadow); opacity: 0; transform: translateY(-6px); transition: opacity .25s, transform .25s; text-align: center; }
+.toast.in { opacity: 1; transform: none; }
+.toast.bad { box-shadow: var(--shadow), inset 3px 0 0 var(--bad); }
+.toast.busy::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--warn); vertical-align: 1px; }
+
+/* the one lasting video problem, inside the connection menu */
+.conn-issue { display: flex; gap: 10px; align-items: flex-start; margin: 0 4px 10px; padding: 10px 12px; border-radius: 8px; background: rgba(240, 178, 50, .12); color: var(--text-strong); }
+.conn-issue .ic { width: 18px; height: 18px; color: var(--warn); flex: none; margin-top: 1px; }
+.conn-issue p { margin: 0; font-size: 13px; line-height: 1.45; }
