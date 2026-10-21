@@ -71,13 +71,13 @@ const stub = (name) => `
   const friend = await mk('Saturn');
 
   await player.click('#go-share');
-  await player.waitForSelector('.pick');
-  await player.hover('.pick');
+  await player.waitForSelector('.pick:not(.skel)');
+  await player.hover('.pick:not(.skel)');
   await player.waitForTimeout(250);
   await player.screenshot({ path: '/tmp/claude-0/ui-picker.png' });
   await player.click('.picker-gear[title="Stream quality"]');
   await player.screenshot({ path: '/tmp/claude-0/ui-picker-quality.png' });
-  await player.click('.pick');
+  await player.click('.pick:not(.skel)');
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code = await player.textContent('#code');
   await player.screenshot({ path: '/tmp/claude-0/ui-share-waiting.png' });
@@ -140,12 +140,25 @@ const stub = (name) => `
   await player.click('#preview-show');
   await player.waitForTimeout(1200);
   console.log('preview back on:', JSON.stringify(await player.evaluate(() => ({ placeholder: !document.getElementById('preview-off').hidden, decoding: !!document.getElementById('preview-video').srcObject }))));
-  await player.click('#stream-set-btn');
-  await player.waitForTimeout(200);
-  await player.screenshot({ path: '/tmp/claude-0/ui-share-settings.png' });
+  // connection panel (structured) + my account menu + end confirmation
+  await player.click('#conn-btn');
+  await player.waitForTimeout(2300);
+  await player.screenshot({ path: '/tmp/claude-0/ui-conn-panel.png', clip: { x: 760, y: 0, width: 440, height: 420 } });
+  console.log('conn rows:', JSON.stringify(await player.evaluate(() => [...document.querySelectorAll('#conn-grid dt')].map((d) => d.textContent))));
   await player.keyboard.press('Escape');
+  await player.click('#me-btn');
+  await player.waitForTimeout(200);
+  await player.screenshot({ path: '/tmp/claude-0/ui-me-menu.png', clip: { x: 800, y: 0, width: 400, height: 260 } });
+  await player.keyboard.press('Escape');
+  await player.click('#end');
+  await player.waitForTimeout(200);
+  console.log('end confirm:', await player.evaluate(() => [document.getElementById('end-confirm').open, document.getElementById('end-text').textContent]));
+  await player.screenshot({ path: '/tmp/claude-0/ui-end-confirm.png' });
+  await player.click('#end-cancel');
+  console.log('still sharing after cancel:', await player.evaluate(() => !window.__app.ended && !!window.__app.call));
   console.log('invite + hidden once friend is in:', await player.evaluate(() => document.getElementById('invite-wrap').hidden));
-  await friend.hover('#open-settings');
+  await friend.mouse.move(10, 400);
+  await friend.hover('#conn-btn');
   await friend.waitForTimeout(450);
   console.log('tooltip:', JSON.stringify(await friend.evaluate(() => ({ shown: !document.getElementById('tip').hidden, text: document.getElementById('tip').textContent, nativeTitle: document.getElementById('open-settings').getAttribute('title') }))));
   await friend.screenshot({ path: '/tmp/claude-0/ui-tooltip.png', clip: { x: 800, y: 0, width: 400, height: 110 } });
@@ -250,9 +263,14 @@ const stub = (name) => `
   console.log('watch status:', await friend.textContent('#watch-status'), 'friend=', await friend.evaluate(() => window.__app.friend), 'log hello?', await friend.evaluate(() => window.__app.log.filter((l) => /hello|said/.test(l)).join(' | ')));
   console.log('player stats:', await player.textContent('#q-stats'), '|', await player.textContent('#q-hint'));
   // live change: 720p / 30fps / vp9 setting
-  await player.evaluate(() => { document.getElementById('stream-set-menu').classList.add('open'); document.querySelector('.more-quality').open = true; });
-  await player.selectOption('#q-res', '720');
-  await player.selectOption('#q-fps', '30');
+  // video settings now live in the source picker's quality panel
+  await player.click('#change-source');
+  await player.waitForSelector('#dialog-sources .pick:not(.skel)');
+  await player.click('.picker-gear[title="Stream quality"]');
+  await player.screenshot({ path: '/tmp/claude-0/ui-picker-settings.png' });
+  await player.locator('.picker-quality select').nth(0).selectOption('720');
+  await player.locator('.picker-quality select').nth(1).selectOption('30');
+  await player.click('.picker-cancel');
   await player.waitForTimeout(4500);
   console.log('player stats after 720p30:', await player.textContent('#q-stats'));
   console.log('friend after 720p30:', await friend.textContent('#watch-status'));
@@ -261,9 +279,9 @@ const stub = (name) => `
   console.log('viewer sees source:', await friend.evaluate(() => [!document.getElementById('viewing').hidden, document.getElementById('viewing-name').textContent]));
   // switch to whole screen mid-stream
   await player.click('#change-source');
-  await player.waitForSelector('#dialog-sources .pick');
+  await player.waitForSelector('#dialog-sources .pick:not(.skel)');
   await player.click('#dialog-sources [data-tab=screen]');
-  await player.locator('#dialog-sources .pick').nth(0).click();
+  await player.locator('#dialog-sources .pick:not(.skel)').nth(0).click();
   await player.waitForTimeout(5000);
   console.log('after switch, player:', await player.textContent('#source-name'), '|', await player.textContent('#share-status'));
   console.log('after switch, friend video', await friend.evaluate(() => [document.getElementById('video').videoWidth, document.getElementById('video').videoHeight]), await friend.textContent('#watch-status'));
@@ -283,9 +301,9 @@ const stub = (name) => `
   }));
   // switch back to the game window, then simulate the game recreating its window
   await player.click('#change-source');
-  await player.waitForSelector('#dialog-sources .pick');
+  await player.waitForSelector('#dialog-sources .pick:not(.skel)');
   await player.click('#dialog-sources [data-tab=window]');
-  await player.locator('#dialog-sources .pick').nth(0).click();
+  await player.locator('#dialog-sources .pick:not(.skel)').nth(0).click();
   await player.waitForTimeout(2500);
   await player.evaluate(() => window.__app.stream.getVideoTracks()[0].dispatchEvent(new Event('ended')));
   await player.waitForTimeout(3000);
@@ -340,9 +358,11 @@ const stub = (name) => `
   // ---- profile changes during a session reach the other side ----
   const peerAv = (pg) => pg.evaluate(() => window.__app.peerProfile && window.__app.peerProfile.avatar && (window.__app.peerProfile.avatar.value || window.__app.peerProfile.avatar.kind));
   // friend changes avatar in Settings and saves
-  await friend.click('#open-settings');
+  await friend.click('#me-btn');
+  await friend.click('#open-profile');
   await friend.click('#avatar-picker-settings .avatar-option[data-value="🐙"]');
-  await friend.click('#settings-save');
+  await friend.screenshot({ path: '/tmp/claude-0/ui-profile.png' });
+  await friend.click('#profile-save');
   await player.waitForTimeout(1200);
   console.log('profile sync friend->player (settings save):', await peerAv(player));
   // player's update message is lost; heartbeat version check must catch it
@@ -413,8 +433,8 @@ const stub = (name) => `
     '| mark arrived:', (await starts()) > before,
     '| friend still watching:', await friend.evaluate(() => !document.getElementById('step-watch').hidden));
   await player.waitForTimeout(3000);
-  await player.click('#stream-set-btn');
-  await player.click('#restart-stream');
+  await player.click('#conn-btn');
+  await player.click('#conn-restart');
   await player.waitForTimeout(5000);
   console.log('player restart-stream:', await player.textContent('#share-status'), '| friend:', await friend.textContent('#watch-status'));
   // pairing service drops while friend is connected: no scary error
@@ -424,8 +444,8 @@ const stub = (name) => `
   console.log('signaling drop while connected:', sigStatus, '|', /online/i.test(sigStatus) ? 'FAIL shows error' : 'OK');
   console.log('friend after auto-restart:', await friend.textContent('#watch-status'), JSON.stringify(await friend.evaluate(() => [document.getElementById('freeze').hidden, document.getElementById('freeze').textContent])));
   console.log('friend banner during stall:', JSON.stringify(await friend.evaluate(() => [document.getElementById('freeze').hidden, document.getElementById('freeze').textContent])));
-  await friend.click('#open-settings');
-  await friend.click('#open-details');
+  await friend.click('#conn-btn');
+  await friend.click('#conn-details');
   await friend.waitForTimeout(500);
   console.log('--- friend details ---\n' + (await friend.textContent('#details-text')).split('\n').slice(0, 30).join('\n'));
   await friend.click('#details-close');
@@ -457,13 +477,13 @@ const stub = (name) => `
   console.log('friend update: rejoined ->', await friend.textContent('#watch-status'), '| player:', await player.textContent('#share-status'));
 
   // player ends -> friend sees ended
-  await player.click('#end');
+  await player.click('#end'); await player.click('#end-yes');
   await friend.waitForFunction(() => /ended the session/.test(document.getElementById('join-status').textContent), null, { timeout: 15000 });
   console.log('friend after end:', await friend.textContent('#join-status'));
 
   // reshare and rejoin works
   await player.click('#go-share');
-  await player.click('.pick');
+  await player.click('.pick:not(.skel)');
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code2 = await player.textContent('#code');
   await friend.fill('#join-code', `Join my session: https://x.github.io/gameguide/join/?code=${code2.toLowerCase()} or type ${code2}`);
@@ -473,7 +493,7 @@ const stub = (name) => `
   await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0, null, { timeout: 30000 });
   console.log('rejoin OK with', code2);
   // friend ends -> player waits again
-  await friend.click('#end');
+  await friend.click('#end'); await friend.click('#end-yes');
   await player.waitForFunction(() => /left/.test(document.getElementById('share-status').textContent), null, { timeout: 15000 });
   console.log('player after friend left:', await player.textContent('#share-status'));
 

@@ -69,7 +69,7 @@ const stub = (name) => `
     return p;
   };
   const join = async (player, friend) => {
-    await player.click('#go-share'); await player.waitForSelector('.pick'); await player.click('.pick');
+    await player.click('#go-share'); await player.waitForSelector('.pick:not(.skel)'); await player.click('.pick:not(.skel)');
     await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
     const code = await player.textContent('#code');
     await friend.click('#go-join'); await friend.fill('#join-code', code); await friend.click('#join-btn');
@@ -91,7 +91,7 @@ const stub = (name) => `
       window.__silent = true;
     });
     const t0 = Date.now();
-    await player.waitForFunction(() => document.querySelectorAll('#chips .avatar').length === 1, null, { timeout: 20000 }).catch(() => {});
+    await player.waitForFunction(() => document.getElementById('people').hidden, null, { timeout: 20000 }).catch(() => {});
     console.log('A after', Math.round((Date.now() - t0) / 1000), 's: people', await people(player), '| video call closed:', await player.evaluate(() => !window.__app.call), '| log:', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /any path|viewer left/.test(l)))));
     await player.context().close(); await friend.context().close();
   }
@@ -103,8 +103,8 @@ const stub = (name) => `
     await friend.waitForFunction(() => window.__app.drawDc && window.__app.drawDc.readyState === 'open', null, { timeout: 15000 });
     await friend.evaluate(() => { const S = window.__app; if (S.conn) S.conn.send = () => {}; });
     const t0 = Date.now();
-    await friend.click('#end');
-    await player.waitForFunction(() => document.querySelectorAll('#chips .avatar').length === 1, null, { timeout: 20000 }).catch(() => {});
+    await friend.click('#end'); await friend.click('#end-yes');
+    await player.waitForFunction(() => document.getElementById('people').hidden, null, { timeout: 20000 }).catch(() => {});
     console.log('B left noticed after', ((Date.now() - t0) / 1000).toFixed(1), 's: people', await people(player), '| status:', await player.textContent('#share-status'));
     await player.context().close(); await friend.context().close();
   }

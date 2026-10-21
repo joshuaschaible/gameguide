@@ -29,13 +29,14 @@ const path = require('path');
   await win.evaluate(() => { localStorage.setItem('app.onboarded', 'true'); const d = document.getElementById('welcome'); if (d.open) d.close(); });
   if (await win.isVisible('#step-name')) { await win.fill('#name', 'Tester'); await win.click('#name-form button'); }
   await win.click('#go-share');
-  await win.waitForSelector('.pick', { timeout: 15000 }).catch(() => {});
+  await win.waitForSelector('.pick:not(.skel)', { timeout: 15000 }).catch(() => {});
   console.log('sources html:', (await win.innerHTML('#dialog-sources')).slice(0, 200));
-  const n = await win.locator('.pick').count();
+  const n = await win.locator('.pick:not(.skel)').count();
   console.log('source buttons', n);
   await win.evaluate(() => document.getElementById('source-dialog').close());
   // ---- avatar upload through the real button (real CSP + preload) ----
-  await win.click('#open-settings');
+  await win.click('#me-btn');
+  await win.click('#open-profile');
   const avInput = win.locator('#avatar-picker-settings input[type=file]');
   const avatarNow = () => win.evaluate(() => window.__app.pendingAvatar);
   for (const f of ['photo.png', 'big.jpg', 'broken.png']) {
@@ -56,11 +57,11 @@ const path = require('path');
     await win.evaluate(() => document.querySelectorAll('dialog[open]').forEach((d) => d.close()));
     await win.click('#go-share');
     // The test machine's screen capture sometimes hangs on a second listing; skip then.
-    listed = await win.waitForSelector('.pick', { timeout: 15000 }).then(() => true, () => false);
+    listed = await win.waitForSelector('.pick:not(.skel)', { timeout: 15000 }).then(() => true, () => false);
     if (!listed) console.log('SKIP overlay checks: source list did not load a second time (test machine capture hang)');
   }
   if (n && listed) {
-    await win.click('.pick');
+    await win.click('.pick:not(.skel)');
     await win.waitForTimeout(4000);
     console.log('share status:', await win.textContent('#share-status'));
     const wins = app.windows();
@@ -123,6 +124,7 @@ const path = require('path');
       console.log('track note:', await win.textContent('#track-note'));
     }
     await win.click('#end');
+    await win.click('#end-yes');
     await win.waitForTimeout(500);
     console.log('windows after end:', app.windows().length);
     console.log('hotkeys after end', await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('CommandOrControl+Shift+X')));

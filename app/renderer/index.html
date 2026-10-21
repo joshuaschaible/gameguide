@@ -35,6 +35,8 @@
   <symbol id="i-arrow" viewBox="0 0 256 256"><path d="M204,64V168a12,12,0,0,1-24,0V93L72.49,200.49a12,12,0,0,1-17-17L163,76H88a12,12,0,0,1,0-24H192A12,12,0,0,1,204,64Z"/></symbol>
   <symbol id="i-laser" viewBox="0 0 256 256"><path d="M220.49,190.83a12,12,0,0,1,0,17L207.8,220.49a12,12,0,0,1-17,0l-56.56-56.57L115,214.09c0,.1-.08.21-.13.32a15.83,15.83,0,0,1-14.6,9.59l-.79,0a15.83,15.83,0,0,1-14.41-11L32.8,52.92A16,16,0,0,1,52.92,32.8L213,85.07a16,16,0,0,1,1.41,29.8l-.32.13-50.17,19.27ZM96,32a8,8,0,0,0,8-8V16a8,8,0,0,0-16,0v8A8,8,0,0,0,96,32ZM16,104h8a8,8,0,0,0,0-16H16a8,8,0,0,0,0,16ZM124.42,39.16a8,8,0,0,0,10.74-3.58l8-16a8,8,0,0,0-14.31-7.16l-8,16A8,8,0,0,0,124.42,39.16Zm-96,81.69-16,8a8,8,0,0,0,7.16,14.31l16-8a8,8,0,1,0-7.16-14.31Z"/></symbol>
   <symbol id="i-zoom" viewBox="0 0 256 256"><path d="M229.66,218.34,179.6,168.28a88.21,88.21,0,1,0-11.32,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM144,120H120v24a8,8,0,0,1-16,0V120H80a8,8,0,0,1,0-16h24V80a8,8,0,0,1,16,0v24h24a8,8,0,0,1,0,16Z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 256 256"><path d="M230.93,220a8,8,0,0,1-6.93,4H32a8,8,0,0,1-6.92-12c15.23-26.33,38.7-45.21,66.09-54.16a72,72,0,1,1,73.66,0c27.39,8.95,50.86,27.83,66.09,54.16A8,8,0,0,1,230.93,220Z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm-4,48a12,12,0,1,1-12,12A12,12,0,0,1,124,72Zm12,112a16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40a8,8,0,0,1,0,16Z"/></symbol>
 </svg>
 <header class="top">
   <div class="top-left">
@@ -51,7 +53,7 @@
         </div>
       </div>
       <div id="color-wrap" class="pop-wrap color-wrap">
-        <button id="color-btn" class="tool color-btn" title="Color" aria-haspopup="true" aria-expanded="false"><span id="color-current" class="swatch"></span>Color</button>
+        <button id="color-btn" class="tool color-btn" title="Color" aria-haspopup="true" aria-expanded="false"><span id="color-current" class="swatch"></span><span id="color-name">Red</span><span class="caret"><svg class="ic" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></button>
         <div id="color-menu" class="popover color-menu">
           <div class="swatches" role="group" aria-label="Color">
           <button class="swatch active" data-color="#ff3b6b" title="Red"></button>
@@ -103,98 +105,27 @@
       <div id="conn-menu" class="popover conn-menu">
         <div class="pop-head"><span class="pop-title">Connection</span><span id="conn-level" class="conn-level"></span></div>
         <div id="conn-issue" class="conn-issue" hidden><svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg><p id="conn-issue-text"></p></div>
-        <div id="conn-lines" class="conn-lines"></div>
+        <dl id="conn-grid" class="conn-grid"></dl>
         <span id="watch-status" hidden></span>
-        <div class="pop-actions">
-          <button id="refresh-video" class="ghost small" title="Ask for a fresh video connection"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Refresh video</button>
-          <button id="conn-restart" class="ghost small" title="Fresh capture + fresh video connection"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Restart stream</button>
-          <button id="conn-details" class="link">Troubleshooting details</button>
+        <div class="conn-actions">
+          <button id="refresh-video" class="ghost" title="Ask for a fresh video connection"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Refresh video</button>
+          <button id="conn-restart" class="ghost" title="Fresh capture + fresh video connection. Your friend stays connected."><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Restart stream</button>
+          <button id="conn-details" class="ghost"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Troubleshooting details</button>
         </div>
       </div>
     </div>
     <button id="preview-toggle" class="icon-btn" hidden title="Hide my stream preview (saves resources)" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></button>
-    <div id="stream-set" class="pop-wrap" hidden>
-      <button id="stream-set-btn" class="icon-btn" aria-haspopup="true" aria-expanded="false" title="Stream settings">
-        <svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg>
-      </button>
-      <div id="stream-set-menu" class="popover stream-menu">
-        <div class="pop-title">Stream settings</div>
-        <p id="track-note" class="note track-note"></p>
-      <div class="set-block">
-        <p class="set-title">Video quality <span class="note">(applies right away)</span></p>
-      <div class="q-grid">
-        <label>Resolution
-          <select id="q-res">
-            <option value="native">Native (up to 4K)</option>
-            <option value="1440">1440p</option>
-            <option value="1080">1080p</option>
-            <option value="900">900p</option>
-            <option value="720">720p</option>
-          </select>
-        </label>
-        <label>Frame rate
-          <select id="q-fps">
-            <option value="60">60 fps</option>
-            <option value="30">30 fps</option>
-            <option value="15">15 fps</option>
-          </select>
-        </label>
-      </div>
-      <details class="more-quality">
-        <summary>More options</summary>
-        <div class="q-grid">
-        <label>Max quality (bitrate)
-          <select id="q-mbps">
-            <option value="4">Low (slow internet)</option>
-            <option value="8">Medium</option>
-            <option value="12">High (recommended)</option>
-            <option value="20">Very high</option>
-            <option value="30">Max (same Wi-Fi / wired)</option>
-          </select>
-        </label>
-        <label>When the network struggles
-          <select id="q-prefer">
-            <option value="balanced">Balanced (recommended)</option>
-            <option value="sharp">Keep it sharp</option>
-            <option value="smooth">Keep it smooth</option>
-          </select>
-        </label>
-        <label>Video format
-          <select id="q-codec">
-            <option value="h264">Fast (H.264, recommended)</option>
-            <option value="vp9">Sharper text (VP9, more CPU)</option>
-            <option value="vp8">Most compatible (VP8)</option>
-            <option value="auto">Automatic</option>
-          </select>
-        </label>
-        </div>
-        <p id="q-stats" class="q-stats"></p>
-        <p id="q-pipe" class="q-stats q-pipe"></p>
-      </details>
-      </div>
-      <div class="set-block">
-        <label class="check-row"><input id="sound" type="checkbox" checked> Play a sound when your friend draws</label>
-        <label class="check-row" title="If marks stop showing in a game, turn this off: some games report themselves as not in front even while you play."><input id="focus-only" type="checkbox"> Only show drawings while the game is in front</label>
-      </div>
-      <div class="set-block hotkeys">
-        <p class="hotkeys-title">In-game hotkeys</p>
-        <ul class="hotkey-list">
-          <li><span><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></span> Erase marks</li>
-          <li><span><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd></span> Hide / show marks</li>
-          <li><span><kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd></span> Sound on / off</li>
-        </ul>
-      </div>
-      <div class="set-block">
-        <p class="note">Drawings appear over fullscreen games and fade after a few seconds; your mouse and keyboard still go to the game. If a game hides them, switch it to <b>Borderless</b> or <b>Windowed fullscreen</b>. You'll still hear the sound cue either way.</p>
-        <button id="test-draw" class="ghost small" title="Draws a sample mark on your screen so you can check it shows up on top of your game"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg>Test drawing</button>
-        <button id="restart-stream" class="ghost small" title="Fresh capture + fresh video connection. Your friend stays connected."><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Restart stream</button>
-      </div>
+    <button id="end" class="danger small" hidden>End session</button>
+    <div id="me-wrap" class="pop-wrap">
+      <button id="me-btn" class="me-btn" aria-haspopup="true" aria-expanded="false" title="You"><span id="me-avatar"></span></button>
+      <div id="me-menu" class="popover me-menu" role="menu">
+        <div class="me-head"><span id="me-head-avatar"></span><span id="me-head-name" class="me-name"></span></div>
+        <button id="open-profile" class="menu-item" role="menuitem"><svg class="ic" aria-hidden="true"><use href="#i-user"/></svg><span>Profile</span></button>
+        <button id="open-settings" class="menu-item" role="menuitem"><svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg><span>Settings</span></button>
+        <button id="check-updates" class="menu-item" role="menuitem"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span>Check for updates</span></button>
+        <p id="version" class="me-version"></p>
       </div>
     </div>
-    <button id="end" class="danger small" hidden>End session</button>
-    <button id="open-settings" class="icon-btn" title="Settings" aria-label="Settings">
-      <svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg>
-    </button>
   </div>
 </header>
 
@@ -338,13 +269,20 @@
   </div>
 </dialog>
 
-<dialog id="settings">
-  <h2>Settings</h2>
+<dialog id="profile">
+  <h2>Profile</h2>
   <label>Gamer tag <input id="settings-name" type="text" maxlength="24"></label>
   <p class="note pick-label">Avatar</p>
   <div id="avatar-picker-settings"></div>
+  <div class="row gap end">
+    <button id="profile-cancel" class="ghost">Cancel</button>
+    <button id="profile-save" class="primary">Save</button>
+  </div>
+</dialog>
 
-  <div class="set-section">
+<dialog id="settings">
+  <h2>Settings</h2>
+  <div class="set-section first">
     <p class="set-title">Appearance</p>
     <div class="set-row">
       <span class="note">Theme</span>
@@ -367,31 +305,9 @@
   </div>
 
   <div class="set-section">
-    <p class="set-title">Updates</p>
-    <div class="set-row">
-      <span id="version" class="note"></span>
-      <button id="check-updates" class="ghost small">Check for updates</button>
-    </div>
-    <p id="settings-update" class="note set-status"></p>
-  </div>
-
-  <div class="set-section">
-    <p class="set-title">Help</p>
-    <div class="set-row">
-      <span class="note">Quick tour of sharing, joining and drawing.</span>
-      <button id="open-welcome" class="ghost small">How it works</button>
-    </div>
-  </div>
-
-  <div class="set-section">
-    <p class="set-title">Troubleshooting</p>
-    <div class="set-row">
-      <span class="note">Something not working? Copy this and send it to whoever is helping you.</span>
-      <div class="row">
-        <button id="copy-details" class="ghost small">Copy details</button>
-        <button id="open-details" class="ghost small">View</button>
-      </div>
-    </div>
+    <p class="set-title">While streaming</p>
+    <label class="check"><input id="sound" type="checkbox" checked> Play a sound when your friend draws</label>
+    <label class="check" title="If marks stop showing in a game, turn this off: some games report themselves as not in front even while you play."><input id="focus-only" type="checkbox"> Only show drawings while the game is in front</label>
   </div>
 
   <details class="advanced">
@@ -408,8 +324,55 @@
   </div>
 </dialog>
 
+<dialog id="end-confirm" class="confirm">
+  <h2 id="end-title">End session?</h2>
+  <p id="end-text" class="note">Your friend will be disconnected.</p>
+  <div class="row gap end">
+    <button id="end-cancel" class="ghost">Cancel</button>
+    <button id="end-yes" class="danger">End session</button>
+  </div>
+</dialog>
+
 <div id="tip" class="tip" role="tooltip" hidden></div>
 <div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="q-store" hidden>
+  <select id="q-res">
+            <option value="native">Native (up to 4K)</option>
+            <option value="1440">1440p</option>
+            <option value="1080">1080p</option>
+            <option value="900">900p</option>
+            <option value="720">720p</option>
+          </select>
+  <select id="q-fps">
+            <option value="60">60 fps</option>
+            <option value="30">30 fps</option>
+            <option value="15">15 fps</option>
+          </select>
+  <select id="q-mbps">
+            <option value="4">Low (slow internet)</option>
+            <option value="6">Medium-low</option>
+            <option value="8">Medium</option>
+            <option value="12">High (recommended)</option>
+            <option value="20">Very high</option>
+            <option value="30">Max (same Wi-Fi / wired)</option>
+          </select>
+  <select id="q-prefer">
+            <option value="balanced">Balanced (recommended)</option>
+            <option value="sharp">Keep it sharp</option>
+            <option value="smooth">Keep it smooth</option>
+          </select>
+  <select id="q-codec">
+            <option value="h264">Fast (H.264, recommended)</option>
+            <option value="vp9">Sharper text (VP9, more CPU)</option>
+            <option value="vp8">Most compatible (VP8)</option>
+            <option value="auto">Automatic</option>
+          </select>
+  <p id="q-stats"></p>
+  <p id="q-pipe"></p>
+  <p id="track-note"></p>
+  <button id="restart-stream" type="button"></button>
+</div>
+
 
 <script src="peerjs.min.js"></script>
 <script src="marks.js"></script>

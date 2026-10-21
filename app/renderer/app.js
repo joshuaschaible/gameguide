@@ -87,7 +87,6 @@
     $('tools').hidden = id !== 'step-watch';
     $('share-tools').hidden = id !== 'step-share';
     updateInviteBtn();
-    $('stream-set').hidden = id !== 'step-share';
     $('preview-toggle').hidden = id !== 'step-share';
     document.body.classList.toggle('watching', id === 'step-watch' || id === 'step-share');
     if (id !== 'step-watch' && $('react-menu')) $('react-menu').hidden = true;
@@ -115,11 +114,17 @@
     const people = [];
     if (S.name) people.push({ name: S.name, avatar: S.avatar, you: true, role: S.role === 'share' ? 'Streaming' : S.role === 'join' ? 'Watching' : '' });
     if (S.peerProfile) people.push({ name: S.peerProfile.name, avatar: S.peerProfile.avatar, you: false, role: S.role === 'share' ? 'Watching' : 'Streaming' });
-    $('people').hidden = !people.length;
+    const others = people.filter((p) => !p.you);
+    $('people').hidden = !others.length;
+    // my avatar = the account menu button (top right)
+    $('me-avatar').replaceChildren(window.Profile.render(S.avatar, S.name, 30));
+    $('me-head-avatar').replaceChildren(window.Profile.render(S.avatar, S.name, 36));
+    $('me-head-name').textContent = S.name || 'You';
+    $('me-btn').title = S.name ? `${S.name} (you)` : 'You';
     updateInviteBtn();
     if (S.role === 'share') renderLiveCard();
     // In the stack you are always in front (leftmost, on top); others behind.
-    people.forEach((p, i, arr) => {
+    others.forEach((p, i, arr) => {
       const av = window.Profile.render(p.avatar, p.name, 28);
       av.classList.add('stacked');
       av.style.zIndex = String(arr.length - i);
@@ -345,6 +350,7 @@
     S.source = null;
     S.peerProfile = null;
     S.peerSource = null;
+    S.connRows = null;
     try { resetZoom(); } catch { /* not set up yet */ }
     S.peerUpdating = false;
     if (document.getElementById('chips')) renderChips();
@@ -661,21 +667,16 @@
     const lv = raw === 'good' && S.role === 'share' && connIssueText() ? 'ok' : raw; // match the icon
     $('conn-level').textContent = LEVEL_TEXT[lv];
     $('conn-level').className = `conn-level lv-${lv}`;
-    const lines = [];
     const problem = S.role === 'share' ? connIssueText() : '';
     $('conn-issue').hidden = !problem;
     $('conn-issue-text').textContent = problem;
-    if (S.role === 'join') {
-      lines.push($('watch-status').textContent || 'Waiting for video…');
-    } else if (S.role === 'share') {
-      for (const id of ['q-stats', 'q-pipe']) if ($(id).textContent) lines.push($(id).textContent);
-    }
-    if (S.sigDetail) lines.push(S.sigDetail);
-    $('conn-lines').innerHTML = '';
-    for (const l of lines) {
-      const p = document.createElement('p');
-      p.textContent = l;
-      $('conn-lines').appendChild(p);
+    const grid = $('conn-grid');
+    grid.replaceChildren();
+    const rows = S.connRows && S.connRows.length ? S.connRows : [['Video', 'Starting…']];
+    for (const [k, v] of rows) {
+      const dt = document.createElement('dt'); dt.textContent = k;
+      const dd = document.createElement('dd'); dd.textContent = v;
+      grid.append(dt, dd);
     }
     $('refresh-video').hidden = S.role !== 'join';
     $('conn-restart').hidden = S.role !== 'share';
@@ -695,6 +696,20 @@
     parts.push(`${v.codec}${v.hw === true ? ' (hardware)' : v.hw === false ? ' (software)' : ''}`);
     if (route) parts.push(route.label);
     return parts.join(' · ');
+  }
+  // Structured rows for the connection panel.
+  const TRACK_SHORT = { tracking: 'Following the game window', screen: 'On top of the screen', background: 'Game is behind another app', minimized: 'Hidden (game minimized)', away: 'Hidden (you\'re not in the game)', closed: 'Shared window closed', untracked: 'Position unknown' };
+  function connRows(v, net, route, extra) {
+    const rows = [];
+    if (v && v.w) rows.push(['Video', `${v.w}×${v.h} · ${r0(v.fps)} fps`]);
+    if (extra && extra.shown != null) rows.push([S.role === 'share' ? 'Friend sees' : 'Showing', `${r0(extra.shown)} fps`]);
+    if (v && v.mbps != null) rows.push(['Bitrate', `${v.mbps.toFixed(1)} Mbps`]);
+    if (v && v.codec) rows.push([S.role === 'share' ? 'Encoder' : 'Decoder', `${v.codec}${v.hw === true ? ' · hardware' : v.hw === false ? ' · software' : ''}`]);
+    if (route) rows.push(['Route', route.label.charAt(0).toUpperCase() + route.label.slice(1)]);
+    if (net && net.rtt != null) rows.push(['Ping', `${Math.round(net.rtt)} ms`]);
+    if (net && net.loss != null) rows.push(['Packet loss', `${(net.loss * 100).toFixed(1)}%`]);
+    if (S.role === 'share' && TRACK_SHORT[S.trackState]) rows.push(['Drawings', TRACK_SHORT[S.trackState]]);
+    return rows;
   }
   // Where frames are lost, step by step. Player side only.
   function pipeline(v, viewer) {
@@ -784,6 +799,7 @@
         } else S.swFallbackSince = null;
         $('q-stats').textContent = `Sending: ${fmtStats(v, routeCache)}`;
         const netS = await readNet(pc, 'outbound-rtp');
+        S.connRows = connRows(v, netS, routeCache, { shown: viewer ? viewer.shown : null });
         setSignal(signalLevel(pc.connectionState, netS, { limited: v && v.limit === 'bandwidth' }),
           netS ? `Round trip ${netS.rtt != null ? Math.round(netS.rtt) : '–'} ms · loss ${netS.loss != null ? (netS.loss * 100).toFixed(1) : '–'}%` : '');
         updateConn();
@@ -812,6 +828,7 @@
         const shown = rate('shown', S.framesShown, performance.now());
         $('watch-status').textContent = `Watching ${S.friend || 'your friend'} · ${fmtStats(v, routeCache)}${shown != null ? ` · showing ${r0(shown)} fps` : ''}`;
         const netV = await readNet(pc, 'inbound-rtp');
+        S.connRows = connRows(v, netV, routeCache, { shown });
         setSignal(signalLevel(pc.connectionState, netV),
           netV ? `Round trip ${netV.rtt != null ? Math.round(netV.rtt) : '–'} ms · loss ${netV.loss != null ? (netV.loss * 100).toFixed(1) : '–'}%` : '');
         if (S.conn && S.conn.open && v) {
@@ -850,6 +867,8 @@
     const q = quality();
     $('q-res').value = q.res;
     $('q-fps').value = String(q.fps);
+    // a saved value that isn't one of the choices still shows (instead of a blank box)
+    if (![...$('q-mbps').options].some((o) => o.value === String(q.mbps))) $('q-mbps').add(new Option(`${q.mbps} Mbps`, String(q.mbps)));
     $('q-mbps').value = String(q.mbps);
     $('q-prefer').value = q.prefer;
     $('q-codec').value = q.codec;
@@ -886,14 +905,19 @@
   // Renders the source picker into `box`. onPick(source) is called on click.
   async function renderSources(box, onPick, opts) {
     opts = opts || {};
-    box.innerHTML = '<p class="note">Looking for games, apps and screens…</p>';
+    // Skeleton in the same shape as the real picker, so the modal doesn't jump.
+    if (!box.querySelector('.picker')) {
+      box.innerHTML = `<div class="picker loading" aria-busy="true"><div class="picker-tabs"><button type="button" class="on" disabled>Applications</button><button type="button" disabled>Entire Screen</button></div><div class="picker-grid">${'<div class="pick skel"><span class="pick-shot"></span><span class="pick-meta"><span class="skel-line"></span></span></div>'.repeat(4)}</div><div class="picker-foot"><div class="picker-sum"><span class="skel-line w40"></span><span class="skel-line w60"></span></div></div></div>`;
+    } else {
+      box.querySelector('.picker').classList.add('loading'); // refresh: keep the layout, dim it
+    }
     let res;
     try { res = await bridge.listSources(); } catch (e) { res = { sources: [], error: String(e) }; }
     log(`sources: ${res.sources.length}, screen permission: ${res.status}, window tracking: ${res.tracking}${res.trackingError ? ` (${res.trackingError})` : ''}${res.error ? `, error: ${res.error}` : ''}`);
     const permProblem = res.status && res.status !== 'granted' && res.status !== 'not-determined';
     box.innerHTML = '';
     if (!res.sources.length) {
-      box.innerHTML = `<p class="note">Nothing to share found. If you are on a Mac, allow Screen Recording for ${NAME}, then quit and reopen the app.</p>`;
+      box.innerHTML = `<p class="note picker-none">Nothing to share found. If you are on a Mac, allow Screen Recording for ${NAME}, then quit and reopen the app.</p>`;
       return { permProblem: true };
     }
     // Discord-style picker: tabs, big previews, quality summary at the bottom.
@@ -1004,7 +1028,7 @@
       l.appendChild(sel);
       return l;
     };
-    qbox.append(mkSel('Resolution', 'q-res'), mkSel('Frame rate', 'q-fps'), mkSel('Prefer', 'q-prefer'));
+    qbox.append(mkSel('Resolution', 'q-res'), mkSel('Frame rate', 'q-fps'), mkSel('Max quality', 'q-mbps'), mkSel('When the network struggles', 'q-prefer'), mkSel('Video format', 'q-codec'));
     const paintSum = () => {
       const q = quality();
       const pref = { balanced: 'Balanced', sharp: 'Sharper video', smooth: 'Smoother video' }[q.prefer] || 'Balanced';
@@ -2254,7 +2278,8 @@
     $('color-current').classList.toggle('light-swatch', color === '#ffffff');
     $('color-current').classList.toggle('dark-swatch', color === '#111111');
     const name = document.querySelector(`.swatch[data-color="${color}"]`);
-    $('color-btn').title = `Color: ${name ? name.title : color} (click for more)`;
+    $('color-name').textContent = name ? name.title : 'Color';
+    $('color-btn').title = 'Pick a color';
   }
   document.querySelectorAll('.swatch[data-color]').forEach((b) => b.addEventListener('click', () => {
     setColor(b.dataset.color);
@@ -2334,7 +2359,7 @@
     { btn: 'people-btn', menu: 'people-menu' },
     { btn: 'conn-btn', menu: 'conn-menu', onOpen: fillConnMenu },
     { btn: 'invite-btn', menu: 'invite-menu' },
-    { btn: 'stream-set-btn', menu: 'stream-set-menu' },
+    { btn: 'me-btn', menu: 'me-menu' },
     { btn: 'color-btn', menu: 'color-menu' },
     { btn: 'tool-btn', menu: 'tool-menu' },
   ];
@@ -2360,7 +2385,7 @@
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { closeMenus(); setReactMenu(false); } });
   setInterval(() => { if ($('conn-menu').classList.contains('open')) fillConnMenu(); }, 1000);
   $('conn-restart').addEventListener('click', () => { closeMenus(); $('restart-stream').click(); });
-  $('conn-details').addEventListener('click', () => { closeMenus(); $('open-details').click(); });
+  $('conn-details').addEventListener('click', () => { closeMenus(); openDetails(); });
 
   document.addEventListener('keydown', (ev) => {
     if ($('step-watch').hidden || ev.target.tagName === 'INPUT') return;
@@ -2438,25 +2463,6 @@
   });
   $('change-source').addEventListener('click', () => openSourceDialog('switch'));
 
-  // Draws a sample mark on the player's own screen (overlay check).
-  $('test-draw').addEventListener('click', () => {
-    const id = `test${Date.now().toString(36)}`;
-    const color = '#ffd23f';
-    const pts = [];
-    const aspect = S.native ? S.native.h / S.native.w : 9 / 16; // keep it a circle
-    for (let i = 0; i <= 40; i++) {
-      const a = (i / 40) * Math.PI * 2;
-      pts.push([0.5 + Math.cos(a) * 0.16 * aspect, 0.5 + Math.sin(a) * 0.16]);
-    }
-    drawLocal({ t: 'start', id, x: pts[0][0], y: pts[0][1], c: color, h: markSeconds() });
-    pts.slice(1).forEach((p, i) => setTimeout(() => drawLocal({ t: 'move', id, x: p[0], y: p[1] }), 12 * (i + 1)));
-    setTimeout(() => {
-      drawLocal({ t: 'end', id });
-      drawLocal({ t: 'ping', x: 0.5, y: 0.5, c: color });
-    }, 12 * pts.length + 20);
-    if (bridge.overlayToast) bridge.overlayToast('Test: this is how your friend\'s marks look');
-    log('test drawing sent to overlay');
-  });
 
   // First-run walkthrough
   let slide = 0;
@@ -2471,7 +2477,6 @@
   function closeWelcome() { store.set('app.onboarded', true); $('welcome').close(); }
   $('welcome-next').addEventListener('click', () => (slide < 2 ? showSlide(slide + 1) : closeWelcome()));
   $('welcome-skip').addEventListener('click', closeWelcome);
-  $('open-welcome').addEventListener('click', () => { if ($('settings').open) $('settings').close(); openWelcome(); });
   S.maybeWelcome = () => { if (!store.get('app.onboarded', false)) openWelcome(); };
   $('restart-stream').addEventListener('click', async () => {
     if (!S.source) return;
@@ -2548,7 +2553,21 @@
     renderJoinCells();
   });
   $('join-back').addEventListener('click', () => { teardown(); show('step-role'); });
-  $('end').addEventListener('click', () => endSession(''));
+  // "Are you sure?" before ending (it disconnects the other person).
+  $('end').addEventListener('click', () => {
+    const who = (S.peerProfile && S.peerProfile.name) || S.friend;
+    if (S.role === 'share') {
+      $('end-title').textContent = 'End session?';
+      $('end-text').textContent = who ? `${who} will be disconnected and your stream stops.` : 'Your stream stops and the invite code stops working.';
+    } else {
+      $('end-title').textContent = 'Leave session?';
+      $('end-text').textContent = who ? `You'll stop watching ${who}.` : 'You\'ll stop watching.';
+    }
+    $('end-yes').textContent = S.role === 'share' ? 'End session' : 'Leave';
+    $('end-confirm').showModal();
+  });
+  $('end-cancel').addEventListener('click', () => $('end-confirm').close());
+  $('end-yes').addEventListener('click', () => { $('end-confirm').close(); endSession(''); });
 
   // details
   async function buildDetails() {
@@ -2568,31 +2587,43 @@
     lines.push('', ...S.log.slice(-120));
     return lines.join('\n');
   }
-  $('open-details').addEventListener('click', async () => {
-    if ($('settings').open) $('settings').close();
+  async function openDetails() {
     $('details-text').textContent = await buildDetails();
     $('details').showModal();
-  });
-  $('copy-details').addEventListener('click', async () => {
-    await bridge.copy(await buildDetails());
-    flashCopied($('copy-details'));
-  });
+  }
   $('details-close').addEventListener('click', () => $('details').close());
   $('details-copy').addEventListener('click', async () => { await bridge.copy($('details-text').textContent); flashCopied($('details-copy')); });
 
   // settings
+  $('open-profile').addEventListener('click', () => {
+    closeMenus();
+    $('settings-name').value = S.name;
+    S.pendingAvatar = S.avatar;
+    window.Profile.picker($('avatar-picker-settings'), () => S.pendingAvatar, (a) => { S.pendingAvatar = a; });
+    $('profile').showModal();
+  });
+  $('profile-cancel').addEventListener('click', () => $('profile').close());
+  $('profile-save').addEventListener('click', () => {
+    const n = $('settings-name').value.trim().slice(0, 24);
+    const before = JSON.stringify([S.name, S.avatar]);
+    if (n) { S.name = n; store.set('app.name', n); $('name').value = n; }
+    if (S.pendingAvatar) { S.avatar = S.pendingAvatar; store.set('app.avatar', S.avatar); }
+    const changed = JSON.stringify([S.name, S.avatar]) !== before;
+    if (changed) { bumpProfile(); sendCtl(myProfileMsg()); }
+    renderChips();
+    $('profile').close();
+    log(changed ? 'profile saved; sent to friend' : 'profile unchanged');
+  });
   $('open-settings').addEventListener('click', () => {
+    closeMenus();
     const t = store.get('app.turn', {}) || {};
     $('turn-url').value = t.url || '';
     $('turn-user').value = t.user || '';
     $('turn-pass').value = t.pass || '';
     $('relay-only').checked = !!store.get('app.relayOnly', false);
-    $('settings-name').value = S.name;
-    $('settings-update').textContent = '';
     $('mark-seconds').value = String(markSeconds());
     $('mark-seconds-value').textContent = `${markSeconds()} s`;
-    S.pendingAvatar = S.avatar;
-    window.Profile.picker($('avatar-picker-settings'), () => S.pendingAvatar, (a) => { S.pendingAvatar = a; });
+    paintThemeSeg();
     $('settings').showModal();
   });
   $('settings-cancel').addEventListener('click', () => $('settings').close());
@@ -2616,17 +2647,9 @@
     const url = $('turn-url').value.trim();
     store.set('app.turn', url ? { url, user: $('turn-user').value.trim(), pass: $('turn-pass').value } : null);
     store.set('app.relayOnly', $('relay-only').checked);
-    const n = $('settings-name').value.trim().slice(0, 24);
-    const before = JSON.stringify([S.name, S.avatar]);
-    if (n) { S.name = n; store.set('app.name', n); $('name').value = n; }
-    if (S.pendingAvatar) { S.avatar = S.pendingAvatar; store.set('app.avatar', S.avatar); }
-    const profileChanged = JSON.stringify([S.name, S.avatar]) !== before;
-    if (profileChanged) bumpProfile();
     store.set('app.markSeconds', Number($('mark-seconds').value) || 3);
-    renderChips();
-    if (profileChanged) sendCtl(myProfileMsg());
     $('settings').close();
-    log(profileChanged ? 'settings saved; profile sent to friend' : 'settings saved');
+    log('settings saved');
   });
 
   // Avatar: saved one, else a random built-in (saved so it stays the same).
@@ -2702,20 +2725,17 @@
   if (bridge.onUpdate) bridge.onUpdate(showUpdate);
   $('update-dismiss').addEventListener('click', () => { $('update-bar').hidden = true; });
   $('check-updates').addEventListener('click', async () => {
-    const st = $('settings-update');
-    st.textContent = 'Checking…';
-    $('check-updates').disabled = true;
+    closeMenus();
+    toast('Checking for updates…', 'busy');
     try {
       const u = await bridge.checkUpdate();
-      if (!u || u.error) st.textContent = `Couldn't check: ${(u && u.error) || 'no answer'}`;
-      else if (u.enabled === false) st.textContent = 'Updates are off in this build.';
-      else if (u.available) st.textContent = `Version ${u.latest} is available. Use the "Update now" button at the top.`;
-      else if (u.missingAsset) st.textContent = `Version ${u.latest} is out, but not for this computer yet.`;
-      else st.textContent = `You're up to date (v${u.current}).`;
+      if (!u || u.error) toast(`Couldn't check for updates: ${(u && u.error) || 'no answer'}`, 'bad');
+      else if (u.enabled === false) toast('Updates are off in this build.');
+      else if (u.available) toast(`Version ${u.latest} is available. Use "Update now" at the top.`);
+      else if (u.missingAsset) toast(`Version ${u.latest} is out, but not for this computer yet.`);
+      else toast(`You're up to date (v${u.current}).`);
     } catch (e) {
-      st.textContent = `Couldn't check: ${e.message || e}`;
-    } finally {
-      $('check-updates').disabled = false;
+      toast(`Couldn't check for updates: ${e.message || e}`, 'bad');
     }
   });
 
@@ -2774,7 +2794,7 @@
   }
 
   // ---------- tooltips for icon-only buttons (instead of the slow native ones) ----------
-  const TIP_SEL = '.icon-btn, .add-person, .picker-gear';
+  const TIP_SEL = '.icon-btn, .add-person, .picker-gear, .me-btn';
   const tipEl = $('tip');
   let tipFor = null;
   let tipTimer = null;

@@ -570,3 +570,67 @@ dialog.picker-dialog .warn { margin: 0 0 12px; }
 .conn-issue { display: flex; gap: 10px; align-items: flex-start; margin: 0 4px 10px; padding: 10px 12px; border-radius: 8px; background: rgba(240, 178, 50, .12); color: var(--text-strong); }
 .conn-issue .ic { width: 18px; height: 18px; color: var(--warn); flex: none; margin-top: 1px; }
 .conn-issue p { margin: 0; font-size: 13px; line-height: 1.45; }
+
+/* ---------- avatars: rounded squares, like the buttons ---------- */
+.avatar { border-radius: 28%; }
+.avatar-option { border-radius: 30%; }
+.avatar-option .upload-slot { border-radius: 28%; }
+.add-person { border-radius: 28%; }
+.people-btn { border-radius: 8px; }
+/* overlapping stack: straight 2px gap cut from the avatar behind */
+.avatar-stack .avatar.stacked + .avatar.stacked {
+  -webkit-mask: linear-gradient(to right, transparent 6px, #000 6px);
+  mask: linear-gradient(to right, transparent 6px, #000 6px);
+}
+#people:not([hidden]) + .invite-wrap { margin-left: -10px; }
+.invite-wrap { margin-left: 0; }
+/* the custom-photo slot is a <label>: don't let dialog label styles shift it */
+.avatar-picker label.avatar-option { margin: 0; display: grid; text-transform: none; letter-spacing: 0; font-size: inherit; gap: 0; }
+
+/* ---------- my avatar = account menu ---------- */
+.me-btn { width: 34px; height: 34px; padding: 2px; display: grid; place-items: center; border-radius: 10px; background: transparent; }
+.me-btn:hover, .me-btn[aria-expanded="true"] { background: var(--hover); }
+.me-menu { min-width: 230px; padding: 6px; }
+.me-head { display: flex; align-items: center; gap: 10px; padding: 8px 8px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.me-name { font-weight: 700; color: var(--text-strong); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-item { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 10px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--text); text-align: left; }
+.menu-item .ic { width: 18px; height: 18px; color: var(--icon); }
+.menu-item:hover { background: var(--accent); color: #fff; }
+.menu-item:hover .ic { color: #fff; }
+.me-version { margin: 6px 10px 4px; font-size: 12px; color: var(--muted); }
+
+/* ---------- connection panel: labeled rows + stacked actions ---------- */
+.conn-menu { width: 320px; }
+.conn-grid { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; margin: 4px 6px 12px; font-size: 13px; }
+.conn-grid dt { color: var(--muted); }
+.conn-grid dd { margin: 0; color: var(--text-strong); font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.conn-actions { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.conn-actions button { width: 100%; justify-content: flex-start; }
+
+/* ---------- settings ---------- */
+.set-section.first { margin-top: 8px; padding-top: 0; border-top: 0; }
+.set-section label.check + label.check { margin-top: 2px; }
+dialog.confirm { width: min(420px, 92vw); }
+dialog.confirm .note { margin: 0; }
+
+/* ---------- color button: dot + name + caret ---------- */
+.top .color-btn { width: auto; padding: 0 10px; gap: 8px; }
+.color-btn .caret { display: inline-flex; color: var(--muted); margin-left: -2px; }
+.color-btn .caret .ic { width: 12px; height: 12px; }
+
+/* ---------- source picker: steady height + loading skeleton ---------- */
+.picker-grid { height: clamp(240px, 50vh, 500px); max-height: none; align-content: start; }
+.picker.loading .picker-grid, .picker.loading .picker-foot { pointer-events: none; }
+.picker.loading:not(:has(.skel)) .picker-grid { opacity: .55; transition: opacity .15s; }
+.pick.skel .pick-shot { background: var(--bg-3); box-shadow: none; }
+.skel-line { display: block; height: 12px; width: 55%; border-radius: 6px; background: var(--bg-3); }
+.skel-line.w40 { width: 120px; height: 14px; margin-bottom: 6px; }
+.skel-line.w60 { width: 180px; }
+.pick.skel .pick-shot, .skel-line { position: relative; overflow: hidden; }
+.pick.skel .pick-shot::after, .skel-line::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .06), transparent); animation: shimmer 1.2s infinite; }
+:root[data-theme="light"] .pick.skel .pick-shot::after, :root[data-theme="light"] .skel-line::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .6), transparent); }
+@keyframes shimmer { to { transform: translateX(100%); } }
+.picker-tabs button:disabled { opacity: 1; cursor: default; }
+.picker-quality { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.picker-none { padding: 40px 10px; text-align: center; }
+.picker-foot { min-height: 40px; }
