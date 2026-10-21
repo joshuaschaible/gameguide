@@ -183,7 +183,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 @keyframes pulse { from { opacity: .3 } to { opacity: 1 } }
 .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 800; }
 
-.update-bar { display: flex; align-items: center; gap: 14px; padding: 8px 16px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 500; }
+.update-bar { display: flex; align-items: center; gap: 14px; padding: 8px 16px; min-height: 48px; /* same height with or without the button */ background: var(--accent); color: #fff; font-size: 14px; font-weight: 500; }
 .update-bar #update-text { flex: 1; }
 .update-bar .primary { background: #fff; color: var(--accent); }
 .update-bar .primary:hover:not(:disabled) { background: #f2f3f5; }
