@@ -19,6 +19,7 @@ const common = {
   asar: { unpack: '**/koffi.node' },
   appVersion: VERSION, name: BRAND.name, executableName: BRAND.name,
   electronVersion: '38.2.0', prune: false,
+  icon: 'build/icons/gameguide', // .icns on Mac, .ico on Windows (A1 Clear G)
 };
 if (!ONLY || ONLY === 'darwin') await packager({ ...common, platform: 'darwin', arch: 'arm64', ignore: keepKoffi('darwin_arm64'),
   appBundleId: BRAND.appId, appCategoryType: 'public.app-category.games',

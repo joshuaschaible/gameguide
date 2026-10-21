@@ -102,6 +102,8 @@ function createMainWindow() {
     minHeight: 620,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#313338' : '#ffffff',
     title: BRAND.name,
+    // Windows/Linux window + taskbar icon (the Mac Dock uses the app bundle's .icns)
+    icon: isMac ? undefined : path.join(__dirname, 'assets', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

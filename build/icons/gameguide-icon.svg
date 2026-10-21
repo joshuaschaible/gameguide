@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 320 320" role="img" aria-labelledby="title description">
+  <title id="title">GameGuide — A1 Clear G</title>
+  <desc id="description">Faithful vector reconstruction of the selected top-left A1 Clear G refinement. A rounded continuous G sweeps into an upward-right guiding arrow.</desc>
+  <defs>
+    <linearGradient id="violet" x1="0" y1="0" x2="230" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C5CFF"/>
+      <stop offset="1" stop-color="#4D30FD"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".24"/>
+      <stop offset=".35" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset=".75" stop-color="#3E21D9" stop-opacity="0"/>
+      <stop offset="1" stop-color="#3E21D9" stop-opacity=".3"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="320" rx="72" fill="url(#violet)"/>
+  <rect x="1" y="1" width="318" height="318" rx="71" fill="none" stroke="url(#edge)" stroke-width="2"/>
+  <path fill="#FFFFFF" transform="translate(0 3.5)" d="M 155 51.5
+L 205 51.5
+C 217 51.5 225 59 225 71
+L 225 81
+C 225 93 219 99 207 99
+L 155 99
+C 122 99 88 126 88 165
+C 88 196 106 218 135 218
+C 154 218 168 210 185 193
+L 201 175
+L 179 175
+C 167 175 161 169 161 158
+L 161 153
+C 161 142 168 135 179 135
+L 251 135
+C 262 135 269 142 269 153
+L 269 221
+C 269 232 262 238 251 238
+C 239 238 232 231 232 220
+L 232 204
+C 202 238 181 264 132.5 264
+C 71 264 38 224 38 165
+C 38 103 93 51.5 155 51.5
+Z"/>
+</svg>
