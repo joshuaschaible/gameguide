@@ -1218,7 +1218,8 @@
   async function openSourceDialog(mode) {
     if (mode === 'start' || mode === 'switch') pickerMode = mode;
     const dlg = $('source-dialog');
-    if (!dlg.open) dlg.showModal();
+    // Fresh open: skeleton (never stale thumbnails from last time). Refresh inside: keep layout.
+    if (!dlg.open) { $('dialog-sources').innerHTML = ''; dlg.showModal(); }
     const r = await renderSources($('dialog-sources'), (src) => {
       dlg.close();
       if (pickerMode === 'start') startSharing(src); else switchSource(src);

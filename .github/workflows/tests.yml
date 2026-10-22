@@ -1,0 +1,80 @@
+# Tests only: builds and checks the app on Linux, Windows and macOS.
+# Never publishes a release, never uses signing secrets.
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GG_EXPECT_ELECTRON: '44.9.3'
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: |
+          npm install --no-audit --no-fund
+          cd app && npm install --omit=dev --no-audit --no-fund
+      - name: Browsers and Electron binary
+        run: |
+          npx playwright install --with-deps chromium
+          node -e "require('electron')"   # Electron 42+ downloads its binary on first use
+      - name: End-to-end (two app pages over a local pairing server)
+        run: node test/e2e.cjs
+      - name: Viewer leaves without a clean close
+        run: node test/leave.cjs
+      - name: Electron smoke (real Electron, overlay, security guards)
+        run: xvfb-run -a node test/electron-smoke.cjs
+
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            exe: dist/Game Guide-win32-x64/Game Guide.exe
+          - os: macos-14
+            platform: darwin
+            exe: dist/Game Guide-darwin-arm64/Game Guide.app/Contents/MacOS/Game Guide
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      GG_EXPECT_NATIVE: '1'   # Koffi window tracking must load on Windows/macOS
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        shell: bash
+        run: |
+          npm install --no-audit --no-fund
+          cd app && npm install --omit=dev --no-audit --no-fund
+          cd .. && node -e "require('electron')"
+      - name: Hidden updater helper + full-speed opt-out (Windows)
+        if: matrix.platform == 'win32'
+        run: node scripts/check-windows.cjs
+      - name: Electron smoke (from source)
+        shell: bash
+        run: node test/electron-smoke.cjs
+      - name: Package
+        run: node scripts/package.mjs ${{ matrix.platform }}
+      - name: Ad hoc sign (macOS, test build only)
+        if: matrix.platform == 'darwin'
+        run: codesign --force --deep --sign - "dist/Game Guide-darwin-arm64/Game Guide.app"
+      - name: Packaged app smoke (Koffi from app.asar.unpacked, updater, guards)
+        shell: bash
+        run: node test/packaged-smoke.cjs "${{ matrix.exe }}"

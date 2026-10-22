@@ -71,7 +71,7 @@ const stub = (name) => `
   const friend = await mk('Saturn');
 
   await player.click('#go-share');
-  await player.waitForSelector('.pick:not(.skel)');
+  await player.waitForSelector('.picker:not(.loading) .pick:not(.skel)');
   await player.hover('.pick:not(.skel)');
   await player.waitForTimeout(250);
   await player.screenshot({ path: '/tmp/claude-0/ui-picker.png' });

@@ -1,5 +1,6 @@
 const { _electron } = require('playwright');
 const path = require('path');
+const IMGS = process.env.GG_TEST_IMGS || path.join(__dirname, 'fixtures'); // avatar upload test images
 (async () => {
   const app = await _electron.launch({
     executablePath: require('electron'),
@@ -7,6 +8,9 @@ const path = require('path');
     env: { ...process.env },
   });
   const win = await app.firstWindow();
+  // Hard checks: any failure makes the run exit non-zero.
+  const fails = [];
+  const check = (name, ok, detail) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` (${detail})` : ''}`); if (!ok) fails.push(name); };
   app.on('window', (w) => { w.on('pageerror', (e) => console.log('OVERLAY pageerror', e.message)); w.on('console', (m) => { if (m.type() === 'error') console.log('OVERLAY console', m.text()); }); });
   const errs = [];
   win.on('pageerror', (e) => errs.push(e.message));
@@ -25,11 +29,30 @@ const path = require('path');
     const scr = await window.bridge.selectSource('screen:0:0');
     return gone === false && scr === true ? 'OK refused closed window' : `FAIL gone=${gone} screen=${scr}`;
   }));
+  // ---- security: no popups, no navigation away from our pages, clipboard works (async in Electron 44+) ----
+  const ev = await app.evaluate(() => process.versions.electron);
+  check('electron version', !process.env.GG_EXPECT_ELECTRON || ev === process.env.GG_EXPECT_ELECTRON, ev);
+  const info0 = await win.evaluate(() => window.bridge.info());
+  // Windows/macOS: the Koffi native module must load inside this Electron (window tracking, EcoQoS, hidden updater helper).
+  check('native module (koffi) loaded', !process.env.GG_EXPECT_NATIVE || info0.windowTracking === true, `windowTracking=${info0.windowTracking}`);
+  // Updater: release lookup through Electron's net.fetch (needs internet; skipped with GG_NO_NET).
+  if (!process.env.GG_NO_NET) {
+    const u = await win.evaluate(() => window.bridge.checkUpdate());
+    if (u && u.enabled === false) console.log('SKIP updater query: updates are off when running from source (covered by test/packaged-smoke.cjs)');
+    else check('updater can query releases', !!u && !u.error && u.latest !== undefined, JSON.stringify(u).slice(0, 160));
+  }
+  const before = app.windows().length;
+  check('popup blocked', await win.evaluate(() => window.open('https://example.com/', '_blank') === null));
+  await win.evaluate(() => { const a = document.createElement('a'); a.href = 'https://example.com/'; a.target = '_blank'; document.body.appendChild(a); a.click(); a.remove(); });
+  await win.waitForTimeout(400);
+  await win.evaluate(() => window.bridge.copy('gg-clip-check-44'));
+  check('clipboard roundtrip', await win.evaluate(() => window.bridge.paste()) === 'gg-clip-check-44');
+  check('no popup window opened', app.windows().length === before, `${app.windows().length} windows`);
   console.log('version text:', await win.textContent('#version'));
   await win.evaluate(() => { localStorage.setItem('app.onboarded', 'true'); const d = document.getElementById('welcome'); if (d.open) d.close(); });
   if (await win.isVisible('#step-name')) { await win.fill('#name', 'Tester'); await win.click('#name-form button'); }
   await win.click('#go-share');
-  await win.waitForSelector('.pick:not(.skel)', { timeout: 15000 }).catch(() => {});
+  await win.waitForSelector('.picker:not(.loading) .pick:not(.skel)', { timeout: 15000 }).catch(() => {});
   console.log('sources html:', (await win.innerHTML('#dialog-sources')).slice(0, 200));
   const n = await win.locator('.pick:not(.skel)').count();
   console.log('source buttons', n);
@@ -41,14 +64,14 @@ const path = require('path');
   const avatarNow = () => win.evaluate(() => window.__app.pendingAvatar);
   for (const f of ['photo.png', 'big.jpg', 'broken.png']) {
     await win.evaluate(() => { window.__app.pendingAvatar = { kind: 'emoji', value: '🦊', color: '#ff8a00' }; });
-    await avInput.setInputFiles(`/tmp/claude-0/imgs/${f}`);
+    await avInput.setInputFiles(path.join(IMGS, f));
     await win.waitForTimeout(800);
     const a = await avatarNow();
     const tip = await win.getAttribute('#avatar-picker-settings .avatar-option.photo', 'title');
     console.log(`avatar upload ${f}:`, a && a.kind, a && a.data ? `${a.data.slice(0, 23)}… ${a.data.length} chars` : '', '| tip:', tip);
   }
   await win.evaluate(() => { const i = document.createElement('input'); i.type = 'file'; i.id = 'gg-test-file'; document.body.appendChild(i); });
-  await win.setInputFiles('#gg-test-file', '/tmp/claude-0/imgs/big.jpg');
+  await win.setInputFiles('#gg-test-file', path.join(IMGS, 'big.jpg'));
   const sys = await win.evaluate(async () => window.bridge.imageToAvatar(document.getElementById('gg-test-file').files[0]));
   console.log('system decoder fallback:', sys ? `${sys.slice(0, 23)}… ${sys.length} chars` : sys);
   await win.keyboard.press('Escape');
@@ -57,7 +80,7 @@ const path = require('path');
     await win.evaluate(() => document.querySelectorAll('dialog[open]').forEach((d) => d.close()));
     await win.click('#go-share');
     // The test machine's screen capture sometimes hangs on a second listing; skip then.
-    listed = await win.waitForSelector('.pick:not(.skel)', { timeout: 15000 }).then(() => true, () => false);
+    listed = await win.waitForSelector('.picker:not(.loading) .pick:not(.skel)', { timeout: 15000 }).then(() => true, () => false);
     if (!listed) console.log('SKIP overlay checks: source list did not load a second time (test machine capture hang)');
   }
   if (n && listed) {
@@ -129,6 +152,17 @@ const path = require('path');
     console.log('windows after end:', app.windows().length);
     console.log('hotkeys after end', await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('CommandOrControl+Shift+X')));
   }
+  // last, because Playwright keeps waiting on a navigation that we block
+  const pageUrl = win.url();
+  const nWin = app.windows().length;
+  await win.evaluate(() => { location.href = 'https://example.com/'; });
+  await win.waitForTimeout(800);
+  await win.evaluate(() => { location.href = 'file:///etc/hostname'; });
+  await win.waitForTimeout(800);
+  check('navigation blocked', win.url() === pageUrl && app.windows().length === nWin, win.url().replace(/^.*\/renderer\//, 'renderer/'));
   console.log('errors:', errs);
+  check('no page errors', !errs.some((e) => !/PeerJS|WebSocket connection|Lost connection|Establishing a tunnel/.test(e)), errs.filter((e) => !/PeerJS|WebSocket|Lost connection/.test(e)).join(' | ').slice(0, 200));
   await app.close();
+  if (fails.length) { console.error('FAILED:', fails.join(', ')); process.exit(1); }
+  console.log('ALL CHECKS PASSED');
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

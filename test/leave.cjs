@@ -69,7 +69,7 @@ const stub = (name) => `
     return p;
   };
   const join = async (player, friend) => {
-    await player.click('#go-share'); await player.waitForSelector('.pick:not(.skel)'); await player.click('.pick:not(.skel)');
+    await player.click('#go-share'); await player.waitForSelector('.picker:not(.loading) .pick:not(.skel)'); await player.click('.pick:not(.skel)');
     await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
     const code = await player.textContent('#code');
     await friend.click('#go-join'); await friend.fill('#join-code', code); await friend.click('#join-btn');

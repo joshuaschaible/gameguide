@@ -47,6 +47,33 @@ app.commandLine.appendSwitch('enable-features', [
   'AllowWgcWindowCapturer',
 ].join(','));
 
+// ---------- security: windows only ever show our own bundled pages ----------
+// Both windows load local files from ./renderer and never need to go anywhere
+// else. Block everything that could put other content in them: link/page
+// navigation (including a file or link dropped onto the window), redirects,
+// sub-frame navigation, popups (window.open / target=_blank) and <webview>.
+// Permissions (screen capture, clipboard) are only granted to those pages.
+const { pathToFileURL } = require('url');
+const APP_PAGES = pathToFileURL(path.join(__dirname, 'renderer') + path.sep).href;
+const isAppPage = (url) => {
+  try { const u = new URL(String(url)); return u.protocol === 'file:' && u.href.startsWith(APP_PAGES); } catch { return false; }
+};
+app.on('web-contents-created', (_e, contents) => {
+  contents.setWindowOpenHandler(({ url }) => {
+    console.warn('blocked popup:', String(url).slice(0, 200));
+    return { action: 'deny' };
+  });
+  const guard = (ev, url) => {
+    if (isAppPage(url)) return;
+    ev.preventDefault();
+    console.warn('blocked navigation:', String(url).slice(0, 200));
+  };
+  contents.on('will-navigate', guard);
+  contents.on('will-frame-navigate', (ev) => guard(ev, ev.url));
+  contents.on('will-redirect', guard);
+  contents.on('will-attach-webview', (ev) => ev.preventDefault());
+});
+
 // ---------- invite links (<scheme>://join/ABC123) ----------
 // Only one copy runs at a time; a clicked invite link is handed to it.
 let pendingInvite = null;
@@ -519,8 +546,16 @@ app.whenReady().then(() => {
       callback({});
     }
   });
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => {
-    cb(['media', 'display-capture', 'clipboard-sanitized-write'].includes(permission));
+  // Only our own pages may capture the screen or write the clipboard.
+  const allowed = ['media', 'display-capture', 'clipboard-sanitized-write'];
+  session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => {
+    const url = (details && details.requestingUrl) || (wc && wc.getURL());
+    cb(allowed.includes(permission) && isAppPage(url));
+  });
+  // Checks: unchanged for our pages (no check handler used to mean "allowed"), denied for anything else.
+  session.defaultSession.setPermissionCheckHandler((wc, _permission, origin, details) => {
+    const url = (details && details.requestingUrl) || (wc && wc.getURL()) || origin;
+    return isAppPage(url);
   });
 
   // Theme: drives the native title bar color and the window background.
@@ -583,8 +618,9 @@ app.whenReady().then(() => {
       return `data:image/jpeg;base64,${sq.toJPEG(82).toString('base64')}`;
     } catch { return null; }
   });
-  ipcMain.handle('clipboard:write', (_e, text) => { clipboard.writeText(String(text)); return true; });
-  ipcMain.handle('clipboard:read', () => clipboard.readText());
+  // Electron 44+: clipboard read/write are async.
+  ipcMain.handle('clipboard:write', async (_e, text) => { await clipboard.writeText(String(text)); return true; });
+  ipcMain.handle('clipboard:read', async () => clipboard.readText());
   ipcMain.handle('app:info', () => ({
     version: app.getVersion(),
     platform: process.platform,
