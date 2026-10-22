@@ -529,7 +529,9 @@ function closeOverlay() {
 app.whenReady().then(() => {
   if (!gotLock) return;
   // getDisplayMedia() in the renderer is answered with the source the player picked.
-  session.defaultSession.setDisplayMediaRequestHandler(async (_req, callback) => {
+  session.defaultSession.setDisplayMediaRequestHandler(async (req, callback) => {
+    // Only our own pages may capture (a page we didn't ship never gets the game).
+    if (!isAppPage(req && req.frame && req.frame.url)) { console.warn('blocked screen capture request'); return callback({}); }
     try {
       const sources = await desktopCapturer.getSources({
         types: ['window', 'screen'],

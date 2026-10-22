@@ -25,8 +25,8 @@ jobs:
           node-version: 22
       - name: Install
         run: |
-          npm install --no-audit --no-fund
-          cd app && npm install --omit=dev --no-audit --no-fund
+          npm ci --no-audit --no-fund
+          cd app && npm ci --omit=dev --no-audit --no-fund
       - name: Browsers and Electron binary
         run: |
           npx playwright install --with-deps chromium
@@ -61,8 +61,8 @@ jobs:
       - name: Install
         shell: bash
         run: |
-          npm install --no-audit --no-fund
-          cd app && npm install --omit=dev --no-audit --no-fund
+          npm ci --no-audit --no-fund
+          cd app && npm ci --omit=dev --no-audit --no-fund
           cd .. && node -e "require('electron')"
       - name: Hidden updater helper + full-speed opt-out (Windows)
         if: matrix.platform == 'win32'

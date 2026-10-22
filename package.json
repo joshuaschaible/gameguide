@@ -9,7 +9,7 @@
     "package": "node scripts/package.mjs"
   },
   "devDependencies": {
-    "@electron/packager": "^18.4.4",
+    "@electron/packager": "^20.3.0",
     "electron": "44.9.3",
     "peer": "1.0.2",
     "peerjs": "1.5.4",

@@ -4,6 +4,10 @@ import { packager } from '@electron/packager';
 import { readFileSync } from 'fs';
 const BRAND = JSON.parse(readFileSync('app/brand.json', 'utf8'));
 const VERSION = JSON.parse(readFileSync('app/package.json', 'utf8')).version;
+// One source of truth for the Electron runtime: the exact version pinned in the
+// root package.json (the same one tests run against).
+const ELECTRON = JSON.parse(readFileSync('package.json', 'utf8')).devDependencies.electron;
+if (!/^\d+\.\d+\.\d+$/.test(ELECTRON)) throw new Error(`package.json must pin an exact electron version, got "${ELECTRON}"`);
 // Optional: `node scripts/package.mjs darwin` or `... win32` builds just one platform.
 const ONLY = process.argv[2] || '';
 const keepKoffi = (dir) => (p) => {
@@ -18,7 +22,7 @@ const common = {
   dir: 'app', out: 'dist', overwrite: true,
   asar: { unpack: '**/koffi.node' },
   appVersion: VERSION, name: BRAND.name, executableName: BRAND.name,
-  electronVersion: '44.9.3', prune: false,
+  electronVersion: ELECTRON, prune: false,
   icon: 'build/icons/gameguide', // .icns on Mac, .ico on Windows (A1 Clear G)
 };
 if (!ONLY || ONLY === 'darwin') await packager({ ...common, platform: 'darwin', arch: 'arm64', ignore: keepKoffi('darwin_arm64'),

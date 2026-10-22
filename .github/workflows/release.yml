@@ -50,10 +50,10 @@ jobs:
         with:
           node-version: 22
       - name: Install tools
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Install app dependencies
         working-directory: app
-        run: npm install --omit=dev --no-audit --no-fund
+        run: npm ci --omit=dev --no-audit --no-fund
       - name: Check hidden updater helper (Windows)
         if: matrix.platform == 'win32'
         run: node scripts/check-windows.cjs
