@@ -5,6 +5,10 @@ const { PeerServer } = require('peer');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const reporter = require('./report.cjs');
+const r = reporter('End-to-end (two app pages)');
+const { check, note } = r;
+const has = (list, re) => (list || []).some((l) => re.test(l));
 
 const ROOT = path.join(__dirname, '..', 'app', 'renderer');
 const srv = http.createServer((req, res) => {
@@ -81,32 +85,36 @@ const stub = (name) => `
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code = await player.textContent('#code');
   await player.screenshot({ path: '/tmp/claude-0/ui-share-waiting.png' });
-  console.log('code', code);
-  console.log('invite + shown while waiting:', await player.evaluate(() => !document.getElementById('invite-wrap').hidden));
+  note('code', code);
+  check('invite + shown while waiting for a friend', await player.evaluate(() => !document.getElementById('invite-wrap').hidden));
   await player.click('#invite-btn');
   await player.waitForTimeout(200);
   await player.screenshot({ path: '/tmp/claude-0/ui-share-invite.png', clip: { x: 500, y: 0, width: 700, height: 280 } });
   await player.keyboard.press('Escape');
   await player.click('#copy-code');
-  console.log('copied', await player.evaluate(() => window.__copied));
+  check('copy code copies the code', await player.evaluate(() => window.__copied) === code);
 
   // wrong code first
   await friend.click('#go-join');
   await friend.fill('#join-code', 'zzzz22');
   await friend.click('#join-btn');
   await friend.waitForFunction(() => document.getElementById('join-status').classList.contains('bad'), null, { timeout: 15000 });
-  console.log('wrong code ->', await friend.textContent('#join-status'));
+  const wrong = await friend.textContent('#join-status');
+  check('wrong code explains nobody is sharing', /No one is sharing/.test(wrong), wrong);
 
   await friend.fill('#join-code', code.toLowerCase().slice(0, 3) + '-' + code.slice(3));
   await friend.click('#join-btn');
   await friend.waitForSelector('#step-watch:not([hidden])', { timeout: 30000 });
   await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0, null, { timeout: 15000 });
-  console.log('friend video', await friend.evaluate(() => [document.getElementById('video').videoWidth, document.getElementById('video').videoHeight]));
-  console.log('player status:', await player.textContent('#share-status'));
+  const fv = await friend.evaluate(() => [document.getElementById('video').videoWidth, document.getElementById('video').videoHeight]);
+  check('friend gets the window video (1280x720)', fv[0] === 1280 && fv[1] === 720, JSON.stringify(fv));
+  const ps0 = await player.textContent('#share-status');
+  check('player status says connected', /Connected/.test(ps0), ps0);
   await player.waitForTimeout(500);
   const chips = (pg) => pg.evaluate(() => [...document.querySelectorAll('#people-menu .person')].map((c) => `${c.querySelector('.you-tag') ? 'you' : 'peer'}:${c.querySelector('.person-name').firstChild.textContent}:${c.querySelector('.avatar img') ? 'photo' : c.querySelector('.avatar').textContent}`));
-  console.log('player chips:', JSON.stringify(await chips(player)));
-  console.log('friend chips:', JSON.stringify(await chips(friend)));
+  const pc0 = await chips(player); const fc0 = await chips(friend);
+  check('player sees friend in people list', pc0.includes('you:Joshua:photo') && pc0.includes('peer:Saturn:🐺'), JSON.stringify(pc0));
+  check('friend sees player in people list', fc0.includes('you:Saturn:🐺') && fc0.includes('peer:Joshua:photo'), JSON.stringify(fc0));
   await player.screenshot({ path: '/tmp/claude-0/chips-player.png', clip: { x: 0, y: 0, width: 1200, height: 70 } });
   // UI screenshots: header, people menu, connection menu, share page
   await friend.waitForTimeout(4500);
@@ -118,33 +126,40 @@ const stub = (name) => `
   await friend.click('#conn-btn');
   await friend.waitForTimeout(300);
   await friend.screenshot({ path: '/tmp/claude-0/ui-conn.png', clip: { x: 700, y: 0, width: 500, height: 300 } });
-  console.log('signal level (friend, player):', await friend.evaluate(() => window.__app.sigLevel), await player.evaluate(() => window.__app.sigLevel));
+  const sig = [await friend.evaluate(() => window.__app.sigLevel), await player.evaluate(() => window.__app.sigLevel)];
+  check('signal level shown on both sides', sig.every((x) => ['good', 'ok', 'poor'].includes(x)), JSON.stringify(sig));
   await friend.keyboard.press('Escape');
   await player.screenshot({ path: '/tmp/claude-0/ui-share.png' });
   // streamer preview: plays while the app is in front, pauses in the background
   const pv = () => player.evaluate(() => { const v = document.getElementById('preview-video'); return { shown: !document.getElementById('preview').hidden, playing: !v.paused && !!v.srcObject, w: v.videoWidth, pausedLabel: !document.getElementById('preview-paused').hidden }; });
   await player.evaluate(() => { document.hasFocus = () => true; window.dispatchEvent(new Event('focus')); });
   await player.waitForTimeout(600);
-  console.log('preview in front:', JSON.stringify(await pv()));
+  const pv1 = await pv();
+  check('streamer preview plays while the app is in front', pv1.playing && !pv1.pausedLabel, JSON.stringify(pv1));
   await player.evaluate(() => { document.hasFocus = () => false; window.dispatchEvent(new Event('blur')); });
   await player.waitForTimeout(300);
-  console.log('preview in background:', JSON.stringify(await pv()));
+  const pv2 = await pv();
+  check('streamer preview pauses in the background', !pv2.playing && pv2.pausedLabel, JSON.stringify(pv2));
   await player.evaluate(() => { document.hasFocus = () => true; window.dispatchEvent(new Event('focus')); });
   await player.waitForTimeout(400);
-  console.log('preview back in front:', JSON.stringify(await pv()));
+  const pv3 = await pv();
+  check('streamer preview resumes in front', pv3.playing && !pv3.pausedLabel, JSON.stringify(pv3));
   await player.screenshot({ path: '/tmp/claude-0/ui-share-preview.png' });
   await player.click('#preview-toggle');
   await player.waitForTimeout(300);
-  console.log('preview off:', JSON.stringify(await player.evaluate(() => ({ placeholder: !document.getElementById('preview-off').hidden, decoding: !!document.getElementById('preview-video').srcObject }))));
+  const po = await player.evaluate(() => ({ placeholder: !document.getElementById('preview-off').hidden, decoding: !!document.getElementById('preview-video').srcObject }));
+  check('preview off stops decoding', po.placeholder && !po.decoding, JSON.stringify(po));
   await player.screenshot({ path: '/tmp/claude-0/ui-preview-off.png' });
   await player.click('#preview-show');
   await player.waitForTimeout(1200);
-  console.log('preview back on:', JSON.stringify(await player.evaluate(() => ({ placeholder: !document.getElementById('preview-off').hidden, decoding: !!document.getElementById('preview-video').srcObject }))));
+  const pon = await player.evaluate(() => ({ placeholder: !document.getElementById('preview-off').hidden, decoding: !!document.getElementById('preview-video').srcObject }));
+  check('preview back on decodes again', !pon.placeholder && pon.decoding, JSON.stringify(pon));
   // connection panel (structured) + my account menu + end confirmation
   await player.click('#conn-btn');
   await player.waitForTimeout(2300);
   await player.screenshot({ path: '/tmp/claude-0/ui-conn-panel.png', clip: { x: 760, y: 0, width: 440, height: 420 } });
-  console.log('conn rows:', JSON.stringify(await player.evaluate(() => [...document.querySelectorAll('#conn-grid dt')].map((d) => d.textContent))));
+  const rows = await player.evaluate(() => [...document.querySelectorAll('#conn-grid dt')].map((d) => d.textContent));
+  check('connection panel lists video details', rows.includes('Video') && rows.includes('Encoder'), JSON.stringify(rows));
   await player.keyboard.press('Escape');
   await player.click('#me-btn');
   await player.waitForTimeout(200);
@@ -152,15 +167,17 @@ const stub = (name) => `
   await player.keyboard.press('Escape');
   await player.click('#end');
   await player.waitForTimeout(200);
-  console.log('end confirm:', await player.evaluate(() => [document.getElementById('end-confirm').open, document.getElementById('end-text').textContent]));
+  const ec = await player.evaluate(() => [document.getElementById('end-confirm').open, document.getElementById('end-text').textContent]);
+  check('end asks for confirmation naming the friend', ec[0] === true && /Saturn/.test(ec[1]), JSON.stringify(ec));
   await player.screenshot({ path: '/tmp/claude-0/ui-end-confirm.png' });
   await player.click('#end-cancel');
-  console.log('still sharing after cancel:', await player.evaluate(() => !window.__app.ended && !!window.__app.call));
-  console.log('invite + hidden once friend is in:', await player.evaluate(() => document.getElementById('invite-wrap').hidden));
+  check('still sharing after cancel', await player.evaluate(() => !window.__app.ended && !!window.__app.call));
+  check('invite + hidden once friend is in', await player.evaluate(() => document.getElementById('invite-wrap').hidden));
   await friend.mouse.move(10, 400);
   await friend.hover('#conn-btn');
   await friend.waitForTimeout(450);
-  console.log('tooltip:', JSON.stringify(await friend.evaluate(() => ({ shown: !document.getElementById('tip').hidden, text: document.getElementById('tip').textContent, nativeTitle: document.getElementById('open-settings').getAttribute('title') }))));
+  const tip = await friend.evaluate(() => ({ shown: !document.getElementById('tip').hidden, text: document.getElementById('tip').textContent }));
+  check('custom tooltip on icon buttons', tip.shown && /Connection/.test(tip.text), JSON.stringify(tip));
   await friend.screenshot({ path: '/tmp/claude-0/ui-tooltip.png', clip: { x: 800, y: 0, width: 400, height: 110 } });
   await friend.hover('#people-btn');
   await friend.waitForTimeout(250);
@@ -168,15 +185,18 @@ const stub = (name) => `
   await friend.mouse.move(600, 400);
   await friend.click('#react-btn');
   await friend.click('#color-btn');
-  console.log('one dropdown at a time (react->color):', await friend.evaluate(() => [document.getElementById('react-menu').hidden, document.getElementById('color-menu').classList.contains('open')]));
+  const dd1 = await friend.evaluate(() => [document.getElementById('react-menu').hidden, document.getElementById('color-menu').classList.contains('open')]);
+  check('one dropdown at a time (react -> color)', dd1[0] && dd1[1], JSON.stringify(dd1));
   await friend.click('#react-btn');
-  console.log('one dropdown at a time (color->react):', await friend.evaluate(() => [!document.getElementById('react-menu').hidden, document.getElementById('color-menu').classList.contains('open')]));
+  const dd2 = await friend.evaluate(() => [!document.getElementById('react-menu').hidden, document.getElementById('color-menu').classList.contains('open')]);
+  check('one dropdown at a time (color -> react)', dd2[0] && !dd2[1], JSON.stringify(dd2));
   await friend.keyboard.press('Escape');
   await friend.click('#color-btn');
   await friend.waitForTimeout(200);
   await friend.screenshot({ path: '/tmp/claude-0/ui-colors.png', clip: { x: 0, y: 0, width: 600, height: 200 } });
   await friend.click('#color-menu .swatch[data-color="#3bf0ff"]');
-  console.log('color pick:', await friend.evaluate(() => [window.__app && document.getElementById('color-menu').classList.contains('open'), getComputedStyle(document.getElementById('color-current')).backgroundColor]));
+  const cp = await friend.evaluate(() => [document.getElementById('color-menu').classList.contains('open'), getComputedStyle(document.getElementById('color-current')).backgroundColor, document.getElementById('color-name').textContent]);
+  check('color pick closes the menu and shows the color', !cp[0] && cp[1] === 'rgb(59, 240, 255)', JSON.stringify(cp));
   await friend.click('#color-btn');
   await friend.click('#color-menu .swatch[data-color="#ff3b6b"]');
 
@@ -199,33 +219,36 @@ const stub = (name) => `
   for (let i = 1; i <= 8; i++) { await friend.mouse.move(box.x + box.width * (0.2 + i * 0.04), box.y + box.height * (0.7 - i * 0.03)); await friend.waitForTimeout(40); }
   await friend.mouse.up();
   await player.waitForTimeout(400);
-  console.log('arrow on player:', JSON.stringify(await player.evaluate(() => { const a = window.__drawn.filter((m) => m.t === 'arrow'); return { msgs: a.length, first: a.filter((m) => m.first).length, done: a.filter((m) => m.done).length, end: a.length ? [a[a.length - 1].x2, a[a.length - 1].y2] : null }; })));
+  const ar = await player.evaluate(() => { const a = window.__drawn.filter((m) => m.t === 'arrow'); return { msgs: a.length, first: a.filter((m) => m.first).length, done: a.filter((m) => m.done).length }; });
+  check('arrow reaches the player (one first, one done)', ar.msgs >= 2 && ar.first === 1 && ar.done === 1, JSON.stringify(ar));
   await friend.screenshot({ path: '/tmp/claude-0/ui-arrow.png' });
   // ---- laser pointer: no click, just move ----
   await friend.keyboard.press('l');
-  console.log('tool after L:', await friend.textContent('#tool-name'));
+  check('L picks the Cursor tool', await friend.textContent('#tool-name') === 'Cursor');
   for (let i = 0; i <= 12; i++) { await friend.mouse.move(box.x + box.width * (0.4 + i * 0.02), box.y + box.height * 0.4); await friend.waitForTimeout(40); }
   await player.waitForTimeout(300);
-  console.log('laser on player:', JSON.stringify(await player.evaluate(() => { const l = window.__drawn.filter((m) => m.t === 'laser'); return { moves: l.filter((m) => !m.off).length, last: l.length ? [l[l.length - 1].x, l[l.length - 1].y] : null }; })));
+  const lz = await player.evaluate(() => window.__drawn.filter((m) => m.t === 'laser' && !m.off).length);
+  check('cursor (laser) moves reach the player', lz >= 5, `${lz} moves`);
   await friend.screenshot({ path: '/tmp/claude-0/ui-laser.png' });
   await friend.mouse.move(box.x - 20, box.y + 10);
   await player.waitForTimeout(300);
-  console.log('laser off when leaving:', await player.evaluate(() => { const l = window.__drawn.filter((m) => m.t === 'laser'); return !!(l.length && l[l.length - 1].off); }));
+  check('cursor turns off when leaving the video', await player.evaluate(() => { const l = window.__drawn.filter((m) => m.t === 'laser'); return !!(l.length && l[l.length - 1].off); }));
   // ---- zoom: wheel in at the center, then a ping lands where it should ----
   await friend.keyboard.press('o');
   const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
   await friend.mouse.move(cx, cy);
   for (let i = 0; i < 6; i++) { await friend.mouse.wheel(0, -120); await friend.waitForTimeout(30); }
-  console.log('zoom:', await friend.textContent('#zoom-level'), 'pill shown:', await friend.evaluate(() => !document.getElementById('zoom-pill').hidden));
+  const zl = await friend.textContent('#zoom-level');
+  check('wheel zooms in and shows the zoom pill', Number(zl.replace('%', '')) > 100 && await friend.evaluate(() => !document.getElementById('zoom-pill').hidden), zl);
   await player.evaluate(() => { window.__drawn = []; });
   await friend.mouse.click(cx + 100, cy);
   await player.waitForTimeout(400);
   const pz = await player.evaluate(() => window.__drawn.filter((m) => m.t === 'ping').map((m) => [m.x, m.y]));
   const z = await friend.evaluate(() => Number(document.getElementById('zoom-level').textContent.replace('%', '')) / 100);
-  console.log('ping while zoomed', JSON.stringify(pz), 'zoom', z);
+  check('ping while zoomed lands right of center, same height', pz.length === 1 && pz[0][0] > 0.5 && pz[0][0] < 0.6 && Math.abs(pz[0][1] - 0.5) < 0.01, `${JSON.stringify(pz)} at zoom ${z}`);
   await friend.screenshot({ path: '/tmp/claude-0/ui-zoom.png' });
   await friend.click('#zoom-reset');
-  console.log('zoom reset:', await friend.evaluate(() => document.getElementById('zoom-pill').hidden));
+  check('zoom reset hides the pill', await friend.evaluate(() => document.getElementById('zoom-pill').hidden));
   await friend.keyboard.press('p');
   // mark duration: friend sets 7 s, draws; the player's overlay receives h:7
   await friend.evaluate(() => localStorage.setItem('app.markSeconds', '7'));
@@ -233,9 +256,10 @@ const stub = (name) => `
   await friend.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
   await friend.mouse.down(); await friend.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.25); await friend.mouse.up();
   await friend.waitForTimeout(400);
-  console.log('mark duration sent:', JSON.stringify(await player.evaluate(() => window.__drawn.filter((m) => m.t === 'start').map((m) => m.h))));
+  const hs = await player.evaluate(() => window.__drawn.filter((m) => m.t === 'start').map((m) => m.h));
+  check('mark duration setting travels with the mark', hs[hs.length - 1] === 7, JSON.stringify(hs));
   // fade timing in the renderer: h=1 -> gone after ~1.7 s, default -> still there
-  console.log('fade timing:', JSON.stringify(await friend.evaluate(async () => {
+  const fade = await friend.evaluate(async () => {
     const c = document.createElement('canvas'); c.style.cssText = 'width:200px;height:100px'; document.body.appendChild(c);
     const m = new window.Marks(c);
     m.apply({ t: 'start', id: 'a', x: 0.1, y: 0.1, c: '#ff0000', h: 1 }); m.apply({ t: 'end', id: 'a' });
@@ -244,24 +268,30 @@ const stub = (name) => `
     const left = [...m.strokes.keys()];
     c.remove();
     return { leftAfter2s: left };
-  })));
+  });
+  check('marks fade on their own timer', JSON.stringify(fade.leftAfter2s) === '["b"]', JSON.stringify(fade));
   await friend.evaluate(() => localStorage.removeItem('app.markSeconds'));
-  console.log('receipt after mark:', JSON.stringify(await friend.evaluate(() => [document.getElementById('receipt').hidden, document.getElementById('receipt').textContent])));
+  const rc = await friend.evaluate(() => document.getElementById('receipt').textContent);
+  check('receipt confirms the mark was shown', /Shown on Joshua/.test(rc), rc);
   await player.evaluate(() => { window.__rcState = 'hidden'; });
   await friend.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.6);
   await friend.waitForTimeout(600);
-  console.log('receipt when hidden:', JSON.stringify(await friend.evaluate(() => document.getElementById('receipt').textContent)));
+  const rch = await friend.evaluate(() => document.getElementById('receipt').textContent);
+  check('receipt explains hidden drawings', /hid drawings/.test(rch), rch);
   await player.evaluate(() => { window.__rcState = 'shown'; });
   await friend.screenshot({ path: '/tmp/claude-0/friend.png' });
   const drawn = await player.evaluate(() => window.__drawn);
-  console.log('player overlay got', drawn.length, 'msgs; types', [...new Set(drawn.map((d) => d.t))].join(','), 'first', JSON.stringify(drawn[0]), 'ping', JSON.stringify(drawn.find((d) => d.t === 'ping')));
+  const types = [...new Set(drawn.map((d) => d.t))];
+  // (arrow + cursor were checked above; the log was cleared at the zoom step)
+  check('player overlay got strokes and pings', ['start', 'move', 'end', 'ping'].every((t) => types.includes(t)), types.join(','));
   await player.screenshot({ path: '/tmp/claude-0/player.png' });
 
   // details dialog
   await friend.waitForTimeout(5000);
-  console.log('friend video after 6s', await friend.evaluate(() => [document.getElementById('video').videoWidth, document.getElementById('video').videoHeight]));
-  console.log('watch status:', await friend.textContent('#watch-status'), 'friend=', await friend.evaluate(() => window.__app.friend), 'log hello?', await friend.evaluate(() => window.__app.log.filter((l) => /hello|said/.test(l)).join(' | ')));
-  console.log('player stats:', await player.textContent('#q-stats'), '|', await player.textContent('#q-hint'));
+  const ws = await friend.textContent('#watch-status');
+  check('friend status names the player and shows stats', /^Watching Joshua · \d+×\d+/.test(ws), ws);
+  const qs = await player.textContent('#q-stats');
+  check('player sees sending stats', /^Sending: \d+×\d+/.test(qs), qs);
   // live change: 720p / 30fps / vp9 setting
   // video settings now live in the source picker's quality panel
   await player.click('#change-source');
@@ -272,33 +302,36 @@ const stub = (name) => `
   await player.locator('.picker-quality select').nth(1).selectOption('30');
   await player.click('.picker-cancel');
   await player.waitForTimeout(4500);
-  console.log('player stats after 720p30:', await player.textContent('#q-stats'));
-  console.log('friend after 720p30:', await friend.textContent('#watch-status'));
-  console.log('player pipeline:', await player.textContent('#q-pipe'));
-  console.log('source label:', await player.textContent('#source-name'), 'overlay target', JSON.stringify(await player.evaluate(() => window.__overlay)));
-  console.log('viewer sees source:', await friend.evaluate(() => [!document.getElementById('viewing').hidden, document.getElementById('viewing-name').textContent]));
+  const q720 = await player.evaluate(() => JSON.parse(localStorage.getItem('app.quality') || '{}'));
+  check('quality change from the picker is saved', q720.res === '720' && q720.fps === 30, JSON.stringify(q720));
+  check('player pipeline readout', /^Frames per second: captured/.test(await player.textContent('#q-pipe')));
+  check('source label + overlay target follow the window', await player.textContent('#source-name') === 'WARDOGS' && await player.evaluate(() => window.__overlay && window.__overlay.id === 'window:111:0'));
+  const vs = await friend.evaluate(() => [!document.getElementById('viewing').hidden, document.getElementById('viewing-name').textContent]);
+  check('viewer sees what is shared', vs[0] && vs[1] === 'WARDOGS', JSON.stringify(vs));
   // switch to whole screen mid-stream
   await player.click('#change-source');
   await player.waitForSelector('#dialog-sources .pick:not(.skel)');
   await player.click('#dialog-sources [data-tab=screen]');
   await player.locator('#dialog-sources .pick:not(.skel)').nth(0).click();
   await player.waitForTimeout(5000);
-  console.log('after switch, player:', await player.textContent('#source-name'), '|', await player.textContent('#share-status'));
-  console.log('after switch, friend video', await friend.evaluate(() => [document.getElementById('video').videoWidth, document.getElementById('video').videoHeight]), await friend.textContent('#watch-status'));
-  console.log('overlay target now', JSON.stringify(await player.evaluate(() => window.__overlay)));
-  console.log('viewer sees source after switch:', await friend.textContent('#viewing-name')); await friend.screenshot({ path: '/tmp/claude-0/ui-viewer-bar.png', clip: { x: 0, y: 0, width: 1200, height: 60 } });
+  const sw = await player.textContent('#share-status');
+  check('switching source mid-stream', await player.textContent('#source-name') === 'Whole screen' && /Now sharing "Whole screen"/.test(sw), sw);
+  const fv2 = await friend.evaluate(() => document.getElementById('video').videoHeight);
+  check('friend video follows the switch (720p setting from above)', fv2 === 720, String(fv2));
+  check('overlay moves to the screen', await player.evaluate(() => window.__overlay && window.__overlay.kind === 'screen'));
+  check('viewer label follows the switch', await friend.textContent('#viewing-name') === 'Whole screen'); await friend.screenshot({ path: '/tmp/claude-0/ui-viewer-bar.png', clip: { x: 0, y: 0, width: 1200, height: 60 } });
   // a still game screen (no new frames for 14 s): not a freeze, nothing should flash or rebuild
   const friendLogBefore = await friend.evaluate(() => window.__app.log.length);
   const playerLogBefore = await player.evaluate(() => window.__app.log.length);
   await player.evaluate(() => clearInterval(window.__fake));
   let pausedSeen = false;
   for (let i = 0; i < 14; i++) { await friend.waitForTimeout(1000); if (await friend.evaluate(() => !document.getElementById('freeze').hidden)) pausedSeen = true; }
-  console.log('still screen:', JSON.stringify({
+  const still = {
     friendSawPaused: pausedSeen,
     rebuildAsked: await friend.evaluate((n) => window.__app.log.slice(n).filter((l) => /asked player to rebuild/.test(l)).length, friendLogBefore),
     captureRestarted: await player.evaluate((n) => window.__app.log.slice(n).filter((l) => /restarting capture/.test(l)).length, playerLogBefore),
-    stageHint: await player.textContent('#q-hint'),
-  }));
+  };
+  check('a still game screen is not treated as a freeze', !still.friendSawPaused && !still.rebuildAsked && !still.captureRestarted, JSON.stringify(still));
   // switch back to the game window, then simulate the game recreating its window
   await player.click('#change-source');
   await player.waitForSelector('#dialog-sources .pick:not(.skel)');
@@ -307,42 +340,45 @@ const stub = (name) => `
   await player.waitForTimeout(2500);
   await player.evaluate(() => window.__app.stream.getVideoTracks()[0].dispatchEvent(new Event('ended')));
   await player.waitForTimeout(3000);
-  console.log('reattach log:', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /ended|reattach|found/.test(l)))), '| source:', await player.textContent('#source-name'));
+  const ra = await player.evaluate(() => window.__app.log.filter((l) => /reattach/.test(l)));
+  check('a recreated game window is found again', has(ra, /found "WARDOGS" again/) && await player.textContent('#source-name') === 'WARDOGS', JSON.stringify(ra.slice(-1)));
   // kill the video path on the player (simulates a hung encoder / dead video connection)
   await player.evaluate(async () => { const pc = window.__app.call.peerConnection; const snd = pc.getSenders().find((x) => x.track); await snd.replaceTrack(null); });
   await friend.waitForTimeout(9000);
-  console.log('video-dead recovery log (player):', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /rebuild|stalled|friend reports/.test(l)))));
-  console.log('friend after video rebuild:', await friend.textContent('#watch-status'));
+  const vd = await player.evaluate(() => window.__app.log.filter((l) => /rebuilding video|friend reports/.test(l)));
+  check('dead video path gets rebuilt', vd.length > 0, JSON.stringify(vd.slice(-1)));
+  check('friend watching after video rebuild', /^Watching Joshua/.test(await friend.textContent('#watch-status')));
   // simulate the network dropping the video twice: must rebuild, cap bitrate, and NOT switch codec
   for (let i = 0; i < 2; i++) {
     await player.waitForFunction(() => window.__app.call && window.__app.call.peerConnection, null, { timeout: 20000 });
     await player.evaluate(() => { window.__app.lastSendMbps = 9; const pc = window.__app.call.peerConnection; Object.defineProperty(pc, 'iceConnectionState', { get: () => 'failed', configurable: true }); pc.dispatchEvent(new Event('iceconnectionstatechange')); });
     await player.waitForTimeout(13000);
   }
-  console.log('network-drop log:', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /network dropped|capping|switching codec|rebuilding video connection \(video/.test(l)))));
-  console.log('after drops: cap', await player.evaluate(() => window.__app.netCapMbps), 'codecOverride', await player.evaluate(() => window.__app.codecOverride), '| friend:', await friend.textContent('#watch-status'));
+  const nd = await player.evaluate(() => window.__app.log.filter((l) => /network dropped|capping|switching codec/.test(l)));
+  const cap = await player.evaluate(() => [window.__app.netCapMbps, window.__app.codecOverride]);
+  check('network drops cap the bitrate, codec stays', has(nd, /capping this session/) && !has(nd, /switching codec/) && cap[0] >= 3 && cap[1] === null, JSON.stringify(cap));
   // manual refresh button
   await friend.waitForTimeout(11000);
   await friend.click('#conn-btn');
   await friend.click('#refresh-video');
   await friend.waitForTimeout(5000);
-  console.log('after refresh button (player log tail):', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /rebuild|refresh|friend reports/.test(l)).slice(-2))));
-  console.log('friend after refresh:', await friend.textContent('#watch-status'));
+  const rf = await player.evaluate(() => window.__app.log.filter((l) => /friend reports no video/.test(l)));
+  check('refresh button asks the player to rebuild', has(rf, /refresh button/), JSON.stringify(rf.slice(-1)));
+  check('friend watching after refresh', /^Watching Joshua/.test(await friend.textContent('#watch-status')));
   // ---- network change: pairing service lost on both sides, then video dies ----
   await friend.evaluate(() => window.__app.peer.disconnect());
   await player.evaluate(() => window.__app.peer.disconnect());
   await friend.waitForTimeout(6000);
-  console.log('signaling back:', await friend.evaluate(() => !window.__app.peer.disconnected), await player.evaluate(() => !window.__app.peer.disconnected),
-    JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /pairing service/.test(l)).slice(-2))));
+  check('pairing service reconnects on both sides', await friend.evaluate(() => !window.__app.peer.disconnected) && await player.evaluate(() => !window.__app.peer.disconnected));
   const t1 = Date.now();
   await friend.evaluate(() => window.__app.call.peerConnection.close());
-  await friend.waitForFunction(() => /rejoining the session/.test(window.__app.log.join('\n')), null, { timeout: 45000 }).catch(() => {});
-  await friend.waitForFunction(() => !document.getElementById('step-watch').hidden && document.getElementById('video').videoWidth > 0 && window.__app.call && window.__app.call.peerConnection.connectionState === 'connected', null, { timeout: 40000 }).catch(() => {});
-  console.log('dead video -> auto rejoin:', JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /rejoining|video stream received/.test(l)).slice(-2))), 'watching again:', await friend.evaluate(() => !document.getElementById('step-watch').hidden), 'after', Math.round((Date.now() - t1) / 1000), 's');
+  const rj = await friend.waitForFunction(() => /rejoining the session/.test(window.__app.log.join('\n')), null, { timeout: 45000 }).then(() => true, () => false);
+  const back = await friend.waitForFunction(() => !document.getElementById('step-watch').hidden && document.getElementById('video').videoWidth > 0 && window.__app.call && window.__app.call.peerConnection.connectionState === 'connected', null, { timeout: 40000 }).then(() => true, () => false);
+  check('dead video makes the viewer rejoin by itself', rj && back, `after ${Math.round((Date.now() - t1) / 1000)} s`);
   await friend.waitForTimeout(3000);
   // ---- emoji reactions ----
   await friend.click('#react-btn');
-  console.log('react menu open:', await friend.evaluate(() => !document.getElementById('react-menu').hidden), 'items', await friend.locator('#react-menu button').count());
+  check('react menu opens with emoji', await friend.evaluate(() => !document.getElementById('react-menu').hidden) && await friend.locator('#react-menu button').count() >= 6);
   await friend.click('#react-menu button:nth-child(4)');
   await friend.waitForTimeout(250);
   await friend.screenshot({ path: '/tmp/claude-0/react-friend.png' });
@@ -351,10 +387,12 @@ const stub = (name) => `
   await friend.keyboard.press('2');
   await friend.waitForTimeout(600);
   const reacts = await player.evaluate(() => window.__drawn.filter((m) => m.t === 'react').map((m) => `${m.e}@${m.x}`));
-  console.log('player got reactions:', JSON.stringify(reacts), '| menu closed after Esc:', await friend.evaluate(() => document.getElementById('react-menu').hidden));
+  check('reactions reach the player (click + number key)', reacts.length >= 2, JSON.stringify(reacts));
+  check('Esc closes the react menu', await friend.evaluate(() => document.getElementById('react-menu').hidden));
   for (let i = 0; i < 10; i++) await friend.keyboard.press('1');
   await friend.waitForTimeout(500);
-  console.log('flood limit (10 presses):', await player.evaluate(() => window.__drawn.filter((m) => m.t === 'react' && m.e === '👍').length));
+  const flood = await player.evaluate(() => window.__drawn.filter((m) => m.t === 'react' && m.e === '👍').length);
+  check('reaction flood limit (10 presses)', flood >= 1 && flood <= 6, String(flood));
   // ---- profile changes during a session reach the other side ----
   const peerAv = (pg) => pg.evaluate(() => window.__app.peerProfile && window.__app.peerProfile.avatar && (window.__app.peerProfile.avatar.value || window.__app.peerProfile.avatar.kind));
   // friend changes avatar in Settings and saves
@@ -364,14 +402,13 @@ const stub = (name) => `
   await friend.screenshot({ path: '/tmp/claude-0/ui-profile.png' });
   await friend.click('#profile-save');
   await player.waitForTimeout(1200);
-  console.log('profile sync friend->player (settings save):', await peerAv(player));
+  check('profile change reaches the other side', await peerAv(player) === '🐙');
   // player's update message is lost; heartbeat version check must catch it
   await player.evaluate(() => { window.__app.avatar = { kind: 'emoji', value: '🦄', color: '#b26bff' }; window.__app.profileVer = Date.now(); });
   await friend.waitForFunction(() => window.__app.peerProfile && window.__app.peerProfile.avatar && window.__app.peerProfile.avatar.value === '🦄', null, { timeout: 8000 }).catch(() => {});
-  console.log('profile sync player->friend (message lost, healed by heartbeat):', await peerAv(friend));
-  console.log('friend chips now:', JSON.stringify(await chips(friend)));
+  check('lost profile message healed by the heartbeat', await peerAv(friend) === '🦄');
   // ---- never send more than 4K (hardware H.264 limit) ----
-  console.log('send cap check:', JSON.stringify(await player.evaluate(async () => {
+  const capc = await player.evaluate(async () => {
     const S = window.__app;
     const tr = S.stream.getVideoTracks()[0];
     const keep = S.native;
@@ -386,7 +423,8 @@ const stub = (name) => `
     tr.applyConstraints = orig;
     S.native = keep;
     return { constraints: seen };
-  })));
+  });
+  check('never sends more than 4K', JSON.stringify(capc.constraints) === '[[3840,2160]]', JSON.stringify(capc));
   // ---- drawing link dies, video keeps going (seen on Macs) ----
   const drawBox = await friend.locator('#draw').boundingBox();
   const drawAt = async (fx, fy) => {
@@ -395,20 +433,21 @@ const stub = (name) => `
     await friend.mouse.down(); await friend.mouse.move(drawBox.x + drawBox.width * (fx + 0.05), drawBox.y + drawBox.height * fy); await friend.mouse.up();
   };
   const starts = () => player.evaluate(() => window.__drawn.filter((m) => m.t === 'start').length);
-  console.log('heartbeat seen:', await friend.evaluate(() => window.__app.peerHb), await player.evaluate(() => window.__app.peerHb));
+  check('heartbeats on both sides', await friend.evaluate(() => window.__app.peerHb) && await player.evaluate(() => window.__app.peerHb));
   // second drawing path inside the video connection
-  console.log('video-path drawing channel open:', await friend.evaluate(() => !!(window.__app.drawDc && window.__app.drawDc.readyState === 'open')), await player.evaluate(() => !!(window.__app.drawDc && window.__app.drawDc.readyState === 'open')));
+  check('second drawing path inside the video connection', await friend.evaluate(() => !!(window.__app.drawDc && window.__app.drawDc.readyState === 'open')) && await player.evaluate(() => !!(window.__app.drawDc && window.__app.drawDc.readyState === 'open')));
   let n0 = await starts();
   await drawAt(0.3, 0.6);
   await friend.waitForTimeout(600);
-  console.log('both paths up: starts added =', (await starts()) - n0, '(want 1, no duplicates)');
+  const dup = (await starts()) - n0;
+  check('mark sent on both paths arrives once', dup === 1, String(dup));
   // drawing link silently dead (friend's sends vanish): mark must still arrive right away
   await friend.evaluate(() => { window.__realSend = window.__app.conn.send.bind(window.__app.conn); window.__app.conn.send = () => {}; });
   n0 = await starts();
   const t0 = Date.now();
   await drawAt(0.35, 0.65);
   await player.waitForFunction((n) => window.__drawn.filter((m) => m.t === 'start').length > n, n0, { timeout: 5000 }).catch(() => {});
-  console.log('drawing link dead: mark arrived via video path:', (await starts()) - n0 === 1, 'in', Date.now() - t0, 'ms');
+  check('drawing link dead: mark arrives via the video path', (await starts()) - n0 === 1, `${Date.now() - t0} ms`);
   await friend.evaluate(() => { window.__app.conn.send = window.__realSend; });
   const callBefore = await player.evaluate(() => { window.__callRef = window.__app.call; return !!window.__callRef; });
   // 1) silent death: the player stops answering on the drawing link
@@ -418,9 +457,10 @@ const stub = (name) => `
   await friend.waitForFunction(() => window.__app.conn && window.__app.conn.open && !window.__app.relinking, null, { timeout: 15000 });
   await drawAt(0.4, 0.4);
   await friend.waitForTimeout(800);
-  console.log('quiet link relink:', JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /drawing link/.test(l)).slice(-3))),
-    '| mark arrived after relink:', (await starts()) > before,
-    '| same video call kept:', callBefore && await player.evaluate(() => window.__app.call === window.__callRef));
+  const ql = await friend.evaluate(() => window.__app.log.filter((l) => /drawing link/.test(l)));
+  check('quiet drawing link is rebuilt', has(ql, /drawing link quiet/) && has(ql, /drawing link rebuilt/), JSON.stringify(ql.slice(-2)));
+  check('mark arrives after the quiet-link rebuild', (await starts()) > before);
+  check('video call kept through the drawing-link rebuild', callBefore && await player.evaluate(() => window.__app.call === window.__callRef));
   // 2) hard death: the drawing link's network connection is torn down
   before = await starts();
   await friend.evaluate(() => window.__app.conn.peerConnection.close());
@@ -428,26 +468,25 @@ const stub = (name) => `
   await friend.waitForFunction(() => window.__app.conn && window.__app.conn.open && !window.__app.relinking, null, { timeout: 20000 });
   await drawAt(0.5, 0.3);
   await friend.waitForTimeout(800);
-  console.log('closed link relink:', JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /drawing link/.test(l)).slice(-2))),
-    '| player:', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /drawing link|viewer left/.test(l)).slice(-3))),
-    '| mark arrived:', (await starts()) > before,
-    '| friend still watching:', await friend.evaluate(() => !document.getElementById('step-watch').hidden));
+  check('closed drawing link is rebuilt, mark arrives', (await starts()) > before);
+  check('friend still watching after the closed-link rebuild', await friend.evaluate(() => !document.getElementById('step-watch').hidden));
+  check('player did not drop the viewer', !(await player.evaluate(() => window.__app.log.slice(-15).some((l) => /viewer left/.test(l)))));
   await player.waitForTimeout(3000);
   await player.click('#conn-btn');
   await player.click('#conn-restart');
   await player.waitForTimeout(5000);
-  console.log('player restart-stream:', await player.textContent('#share-status'), '| friend:', await friend.textContent('#watch-status'));
+  const rs = await player.textContent('#share-status');
+  check('restart stream from the connection panel', /Stream restarted/.test(rs), rs);
   // pairing service drops while friend is connected: no scary error
   await player.evaluate(() => { const p = window.__app.peer; p.emit('error', Object.assign(new Error('Lost connection to server.'), { type: 'network' })); });
   await player.waitForTimeout(300);
   const sigStatus = await player.textContent('#share-status');
-  console.log('signaling drop while connected:', sigStatus, '|', /online/i.test(sigStatus) ? 'FAIL shows error' : 'OK');
-  console.log('friend after auto-restart:', await friend.textContent('#watch-status'), JSON.stringify(await friend.evaluate(() => [document.getElementById('freeze').hidden, document.getElementById('freeze').textContent])));
-  console.log('friend banner during stall:', JSON.stringify(await friend.evaluate(() => [document.getElementById('freeze').hidden, document.getElementById('freeze').textContent])));
+  check('pairing service drop while connected shows no scary error', !/online/i.test(sigStatus), sigStatus);
   await friend.click('#conn-btn');
   await friend.click('#conn-details');
   await friend.waitForTimeout(500);
-  console.log('--- friend details ---\n' + (await friend.textContent('#details-text')).split('\n').slice(0, 30).join('\n'));
+  const det = await friend.textContent('#details-text');
+  check('Copy details describes the session', /Role: join/.test(det) && /Drawing link: open/.test(det), det.split('\n').slice(0, 3).join(' / '));
   await friend.click('#details-close');
 
   // --- update while in a session: player restarts, friend rejoins by itself ---
@@ -460,10 +499,10 @@ const stub = (name) => `
   });
   await player.waitForTimeout(500);
   await player.reload();                      // the "restart" into the new version
-  await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0 && window.__app.log.some((l) => /video stream received/.test(l)) && window.__app.awaitReturn === null, null, { timeout: 60000 });
+  const pu = await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0 && window.__app.log.some((l) => /video stream received/.test(l)) && window.__app.awaitReturn === null, null, { timeout: 60000 }).then(() => true, () => false);
   await friend.waitForTimeout(1500);
-  console.log('player update: code kept', codeBefore, '->', await player.textContent('#code'), '| friend:', await friend.textContent('#watch-status'));
-  console.log('friend rejoin log:', JSON.stringify(await friend.evaluate(() => window.__app.log.filter((l) => /updating|rejoin|restarting/.test(l)).slice(-4))));
+  check('player update: same code after restart', await player.textContent('#code') === codeBefore, `${codeBefore} -> ${await player.textContent('#code')}`);
+  check('player update: friend rejoins by itself', pu && /^Watching/.test(await friend.textContent('#watch-status')));
   // --- friend updates: friend restarts and rejoins by itself ---
   await friend.evaluate(() => {
     const S = window.__app;
@@ -472,14 +511,16 @@ const stub = (name) => `
   });
   await friend.waitForTimeout(300);
   await friend.reload();
-  await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0, null, { timeout: 60000 });
+  const fu = await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0, null, { timeout: 60000 }).then(() => true, () => false);
   await friend.waitForTimeout(1500);
-  console.log('friend update: rejoined ->', await friend.textContent('#watch-status'), '| player:', await player.textContent('#share-status'));
+  check('friend update: friend rejoins by itself', fu && /^Watching/.test(await friend.textContent('#watch-status')));
 
   // player ends -> friend sees ended
   await player.click('#end'); await player.click('#end-yes');
   await friend.waitForFunction(() => /ended the session/.test(document.getElementById('join-status').textContent), null, { timeout: 15000 });
-  console.log('friend after end:', await friend.textContent('#join-status'));
+  check('player ends: friend is told', /ended the session/.test(await friend.textContent('#join-status')));
+  check('player ends: back to the start screen, no End button', await player.evaluate(() => !document.getElementById('step-role').hidden && document.getElementById('end').hidden));
+  check('friend after end: no End button', await friend.evaluate(() => document.getElementById('end').hidden));
 
   // reshare and rejoin works
   await player.click('#go-share');
@@ -487,18 +528,19 @@ const stub = (name) => `
   await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 });
   const code2 = await player.textContent('#code');
   await friend.fill('#join-code', `Join my session: https://x.github.io/gameguide/join/?code=${code2.toLowerCase()} or type ${code2}`);
-  console.log('otp paste ->', await friend.inputValue('#join-code'), JSON.stringify(await friend.evaluate(() => [...document.querySelectorAll('#join-otp .otp-cells span')].map((c) => c.textContent).join(''))));
+  check('pasting a whole invite extracts the code', await friend.inputValue('#join-code') === code2);
   await friend.screenshot({ path: '/tmp/claude-0/ui-join-otp.png' });
   await friend.click('#join-btn');
-  await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0, null, { timeout: 30000 });
-  console.log('rejoin OK with', code2);
+  check('reshare + rejoin works', await friend.waitForFunction(() => document.getElementById('video').videoWidth > 0, null, { timeout: 30000 }).then(() => true, () => false), code2);
   // friend ends -> player waits again
   await friend.click('#end'); await friend.click('#end-yes');
-  await player.waitForFunction(() => /left/.test(document.getElementById('share-status').textContent), null, { timeout: 15000 });
-  console.log('player after friend left:', await player.textContent('#share-status'));
+  const left = await player.waitForFunction(() => /left/.test(document.getElementById('share-status').textContent), null, { timeout: 15000 }).then(() => true, () => false);
+  check('friend leaves: player waits for someone new', left && await player.evaluate(() => !document.getElementById('invite-wrap').hidden && !document.getElementById('end').hidden), await player.textContent('#share-status'));
 
-  console.log('errors:', errors.length ? errors : 'none');
+  // Expected noise: the wrong-code lookup and torn-down test connections.
+  const real = errors.filter((e) => !/PeerJS|WebSocket|Refused to connect to 'data:/.test(e));
+  check('no page errors', !real.length, real.slice(0, 3).join(' | '));
   await browser.close();
   srv.close(); ps.close && ps.close();
-  process.exit(0);
-})().catch((e) => { console.error('FAIL', e); process.exit(1); });
+  r.finish();
+})().catch((e) => { check('test ran to the end', false, String(e && e.message || e).split('\n')[0].slice(0, 300)); r.finish(); });

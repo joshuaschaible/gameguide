@@ -54,6 +54,10 @@ const stub = (name) => `
   };
 `;
 
+const reporter = require('./report.cjs');
+const rep = reporter('Viewer leaves without a clean close');
+const { check } = rep;
+
 (async () => {
   await new Promise((r) => srv.listen(8123, r));
   const ps = PeerServer({ port: 9000, path: '/', host: '127.0.0.1' });
@@ -83,7 +87,7 @@ const stub = (name) => `
     const player = await mk('Joshua'); await player.evaluate(() => localStorage.setItem('app.friendGoneMs', '6000')); await player.reload();
     const friend = await mk('Saturn');
     await join(player, friend);
-    console.log('A before: people', await people(player));
+    check('A: friend shows in the player\'s stack', await people(player) === 1);
     await friend.evaluate(() => {
       const S = window.__app; clearInterval(S.hbTimer);
       if (S.conn) S.conn.send = () => {};
@@ -91,8 +95,12 @@ const stub = (name) => `
       window.__silent = true;
     });
     const t0 = Date.now();
-    await player.waitForFunction(() => document.getElementById('people').hidden, null, { timeout: 20000 }).catch(() => {});
-    console.log('A after', Math.round((Date.now() - t0) / 1000), 's: people', await people(player), '| video call closed:', await player.evaluate(() => !window.__app.call), '| log:', JSON.stringify(await player.evaluate(() => window.__app.log.filter((l) => /any path|viewer left/.test(l)))));
+    const goneA = await player.waitForFunction(() => document.getElementById('people').hidden, null, { timeout: 20000 }).then(() => true, () => false);
+    const secsA = Math.round((Date.now() - t0) / 1000);
+    check('A: silent friend is dropped', goneA && await people(player) === 0, `${secsA} s`);
+    check('A: video call closed', await player.evaluate(() => !window.__app.call));
+    check('A: player status says the friend left', /left/.test(await player.textContent('#share-status')));
+    check('A: invite + button is back', await player.evaluate(() => !document.getElementById('invite-wrap').hidden));
     await player.context().close(); await friend.context().close();
   }
   // B: drawing link already dead, friend clicks End session -> goodbye arrives on the video path
@@ -104,10 +112,14 @@ const stub = (name) => `
     await friend.evaluate(() => { const S = window.__app; if (S.conn) S.conn.send = () => {}; });
     const t0 = Date.now();
     await friend.click('#end'); await friend.click('#end-yes');
-    await player.waitForFunction(() => document.getElementById('people').hidden, null, { timeout: 20000 }).catch(() => {});
-    console.log('B left noticed after', ((Date.now() - t0) / 1000).toFixed(1), 's: people', await people(player), '| status:', await player.textContent('#share-status'));
+    const goneB = await player.waitForFunction(() => document.getElementById('people').hidden, null, { timeout: 20000 }).then(() => true, () => false);
+    const secsB = (Date.now() - t0) / 1000;
+    check('B: goodbye on the video path is noticed quickly', goneB && secsB < 5, `${secsB.toFixed(1)} s`);
+    check('B: player status says the friend left', /left/.test(await player.textContent('#share-status')));
     await player.context().close(); await friend.context().close();
   }
-  console.log('errors', errors.filter((e) => !/PeerJS/.test(e)));
-  await browser.close(); srv.close(); ps.close && ps.close(); process.exit(0);
-})().catch((e) => { console.log('FAIL', e.message); process.exit(1); });
+  const real = errors.filter((e) => !/PeerJS|WebSocket|Refused to connect to 'data:/.test(e));
+  check('no page errors', !real.length, real.slice(0, 3).join(' | '));
+  await browser.close(); srv.close(); ps.close && ps.close();
+  rep.finish();
+})().catch((e) => { check('test ran to the end', false, String(e && e.message || e).split('\n')[0].slice(0, 300)); rep.finish(); });
