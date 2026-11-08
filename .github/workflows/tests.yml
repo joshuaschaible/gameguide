@@ -52,7 +52,7 @@ jobs:
           - os: windows-latest
             platform: win32
             exe: dist/Game Guide-win32-x64/Game Guide.exe
-          - os: macos-14
+          - os: macos-15
             platform: darwin
             exe: dist/Game Guide-darwin-arm64/Game Guide.app/Contents/MacOS/Game Guide
     runs-on: ${{ matrix.os }}

@@ -41,7 +41,7 @@ jobs:
         include:
           - os: windows-latest
             platform: win32
-          - os: macos-14
+          - os: macos-15
             platform: darwin
     runs-on: ${{ matrix.os }}
     steps:
