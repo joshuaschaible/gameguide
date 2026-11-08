@@ -40,6 +40,10 @@ const { check, skip, note } = r;
     if (u && u.enabled === false) skip('updater query', 'updates are off when running from source (covered by test/packaged-smoke.cjs)');
     else check('updater can query releases', !!u && !u.error && u.latest !== undefined, JSON.stringify(u).slice(0, 160));
   }
+  // Main-process state machines are readable from the page (Copy details) and from main (tests, agents).
+  const ms = await win.evaluate(() => window.bridge.state());
+  check('main-process machines readable', ms && ms.drawings.state === 'shown' && ['idle', 'checking', 'off', 'current', 'available', 'failed'].includes(ms.update.state), JSON.stringify({ drawings: ms && ms.drawings.state, update: ms && ms.update.state }));
+  check('session phase starts idle', await win.evaluate(() => window.__app.phase) === 'idle');
 
   // ---- capture source selection: a closed window is refused, never swapped for the whole screen ----
   const gone = await win.evaluate(() => window.bridge.selectSource('window:999999:0'));
@@ -175,12 +179,29 @@ const { check, skip, note } = r;
       check('overlay leaves the screen after marks fade', await vis() === false);
       const hk = await app.evaluate(({ globalShortcut }) => ['CommandOrControl+Shift+X', 'CommandOrControl+Shift+H', 'CommandOrControl+Shift+M'].map((a) => globalShortcut.isRegistered(a)));
       check('hotkeys registered while sharing', hk.every(Boolean), JSON.stringify(hk));
+      // Hide-drawings hotkey (DRAWINGS machine). Pressing twice quickly used to hide them anyway.
+      const dr = () => app.evaluate(() => global.__gg.machines.drawings.state);
+      const h1 = await app.evaluate(() => global.__gg.toggleDrawings());
+      const h2 = await app.evaluate(() => global.__gg.toggleDrawings());
+      check('hide hotkey: a quick second press shows drawings again', h1 === 'hiding' && h2 === 'shown', `${h1} -> ${h2}`);
+      await app.evaluate(() => global.__gg.toggleDrawings());
+      await win.waitForTimeout(2700);
+      await win.evaluate(() => window.bridge.draw({ t: 'ping', x: 0.5, y: 0.5, c: '#ffd23f' }));
+      await win.waitForTimeout(400);
+      check('hide hotkey: hidden after the toast, marks stay off screen', await dr() === 'hidden' && await vis() === false);
+      await app.evaluate(() => global.__gg.toggleDrawings());
+      check('hide hotkey: pressing again shows drawings', await dr() === 'shown');
+      check('session phase while sharing', /^host\.(registering|waiting)$/.test(await win.evaluate(() => window.__app.phase)), await win.evaluate(() => window.__app.phase));
       note('track note', await win.textContent('#track-note'));
     }
+    // Start hiding, then end right away: the pending hide must not carry into the next share.
+    if (ov) await app.evaluate(() => global.__gg.toggleDrawings());
     await win.click('#end');
     await win.click('#end-yes');
-    await win.waitForTimeout(800);
+    await win.waitForTimeout(2700);
     check('ending closes the overlay', (await ovWin()).length === 0, `${app.windows().length} windows`);
+    check('a hide pending at End is cancelled', await app.evaluate(() => global.__gg.machines.drawings.state) === 'shown');
+    check('session phase back to idle', await win.evaluate(() => window.__app.phase) === 'idle');
     check('hotkeys released after ending', await app.evaluate(({ globalShortcut }) => !globalShortcut.isRegistered('CommandOrControl+Shift+X')));
   }
 

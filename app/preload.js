@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('bridge', {
   copy: (text) => ipcRenderer.invoke('clipboard:write', text),
   paste: () => ipcRenderer.invoke('clipboard:read'),
   info: () => ipcRenderer.invoke('app:info'),
+  state: () => ipcRenderer.invoke('app:state'), // main-process state machines (read-only)
   minimize: () => ipcRenderer.invoke('app:minimize'),
   openScreenSettings: () => ipcRenderer.invoke('app:openScreenSettings'),
   setTheme: (mode, bg) => ipcRenderer.send('theme:set', String(mode), String(bg)),

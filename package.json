@@ -5,7 +5,12 @@
     "setup": "npm install && cd app && npm install",
     "start": "electron app",
     "test": "node test/e2e.cjs",
+    "test:unit": "node --test \"test/unit/*.test.cjs\"",
+    "test:edge": "node test/leave.cjs",
     "test:electron": "node test/electron-smoke.cjs",
+    "test:update": "node test/update-race.cjs",
+    "machines": "node scripts/machines.mjs",
+    "machines:check": "node scripts/machines.mjs --check",
     "package": "node scripts/package.mjs"
   },
   "devDependencies": {

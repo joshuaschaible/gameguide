@@ -31,12 +31,18 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           node -e "require('electron')"   # Electron 42+ downloads its binary on first use
+      - name: State machines (unit) + docs up to date
+        run: |
+          npm run test:unit
+          npm run machines:check
       - name: End-to-end (two app pages over a local pairing server)
         run: node test/e2e.cjs
-      - name: Viewer leaves without a clean close
+      - name: Session edge cases (silent viewer, goodbye on video path, End during capture start)
         run: node test/leave.cjs
       - name: Electron smoke (real Electron, overlay, security guards)
         run: xvfb-run -a node test/electron-smoke.cjs
+      - name: Updater state machine (fake GitHub)
+        run: xvfb-run -a node test/update-race.cjs
 
   native:
     strategy:
@@ -70,6 +76,9 @@ jobs:
       - name: Electron smoke (from source)
         shell: bash
         run: node test/electron-smoke.cjs
+      - name: Updater state machine (fake GitHub)
+        shell: bash
+        run: node test/update-race.cjs
       - name: Package
         run: node scripts/package.mjs ${{ matrix.platform }}
       - name: Ad hoc sign (macOS, test build only)

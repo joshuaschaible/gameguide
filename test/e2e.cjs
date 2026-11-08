@@ -9,6 +9,7 @@ const reporter = require('./report.cjs');
 const r = reporter('End-to-end (two app pages)');
 const { check, note } = r;
 const has = (list, re) => (list || []).some((l) => re.test(l));
+const phase = (pg) => pg.evaluate(() => window.__app.phase);
 
 const ROOT = path.join(__dirname, '..', 'app', 'renderer');
 const srv = http.createServer((req, res) => {
@@ -86,6 +87,7 @@ const stub = (name) => `
   const code = await player.textContent('#code');
   await player.screenshot({ path: '/tmp/claude-0/ui-share-waiting.png' });
   note('code', code);
+  check('player phase: host.waiting', await phase(player) === 'host.waiting');
   check('invite + shown while waiting for a friend', await player.evaluate(() => !document.getElementById('invite-wrap').hidden));
   await player.click('#invite-btn');
   await player.waitForTimeout(200);
@@ -110,6 +112,7 @@ const stub = (name) => `
   check('friend gets the window video (1280x720)', fv[0] === 1280 && fv[1] === 720, JSON.stringify(fv));
   const ps0 = await player.textContent('#share-status');
   check('player status says connected', /Connected/.test(ps0), ps0);
+  check('phases: player host.live, friend viewer.watching', await phase(player) === 'host.live' && await phase(friend) === 'viewer.watching');
   await player.waitForTimeout(500);
   const chips = (pg) => pg.evaluate(() => [...document.querySelectorAll('#people-menu .person')].map((c) => `${c.querySelector('.you-tag') ? 'you' : 'peer'}:${c.querySelector('.person-name').firstChild.textContent}:${c.querySelector('.avatar img') ? 'photo' : c.querySelector('.avatar').textContent}`));
   const pc0 = await chips(player); const fc0 = await chips(friend);
@@ -461,6 +464,10 @@ const stub = (name) => `
   check('quiet drawing link is rebuilt', has(ql, /drawing link quiet/) && has(ql, /drawing link rebuilt/), JSON.stringify(ql.slice(-2)));
   check('mark arrives after the quiet-link rebuild', (await starts()) > before);
   check('video call kept through the drawing-link rebuild', callBefore && await player.evaluate(() => window.__app.call === window.__callRef));
+  check('friend phase went through relinking and back', await friend.evaluate(() => {
+    const h = window.__app.machines.session.snapshot(40).history.filter((x) => !x.ignored).map((x) => x.to);
+    return h.includes('viewer.relinking') && h[h.length - 1] === 'viewer.watching';
+  }));
   // 2) hard death: the drawing link's network connection is torn down
   before = await starts();
   await friend.evaluate(() => window.__app.conn.peerConnection.close());
@@ -486,7 +493,7 @@ const stub = (name) => `
   await friend.click('#conn-details');
   await friend.waitForTimeout(500);
   const det = await friend.textContent('#details-text');
-  check('Copy details describes the session', /Role: join/.test(det) && /Drawing link: open/.test(det), det.split('\n').slice(0, 3).join(' / '));
+  check('Copy details describes the session', /Role: join/.test(det) && /Drawing link: open/.test(det) && /State: session: viewer\.watching/.test(det), det.split('\n').slice(0, 3).join(' / '));
   await friend.click('#details-close');
 
   // --- update while in a session: player restarts, friend rejoins by itself ---
@@ -521,6 +528,7 @@ const stub = (name) => `
   check('player ends: friend is told', /ended the session/.test(await friend.textContent('#join-status')));
   check('player ends: back to the start screen, no End button', await player.evaluate(() => !document.getElementById('step-role').hidden && document.getElementById('end').hidden));
   check('friend after end: no End button', await friend.evaluate(() => document.getElementById('end').hidden));
+  check('phases after the player ends: both idle', await phase(player) === 'idle' && await phase(friend) === 'idle');
 
   // reshare and rejoin works
   await player.click('#go-share');
@@ -536,6 +544,7 @@ const stub = (name) => `
   await friend.click('#end'); await friend.click('#end-yes');
   const left = await player.waitForFunction(() => /left/.test(document.getElementById('share-status').textContent), null, { timeout: 15000 }).then(() => true, () => false);
   check('friend leaves: player waits for someone new', left && await player.evaluate(() => !document.getElementById('invite-wrap').hidden && !document.getElementById('end').hidden), await player.textContent('#share-status'));
+  check('friend leaves: phases host.waiting / idle', await phase(player) === 'host.waiting' && await phase(friend) === 'idle');
 
   // Expected noise: the wrong-code lookup and torn-down test connections.
   const real = errors.filter((e) => !/PeerJS|WebSocket|Refused to connect to 'data:/.test(e));

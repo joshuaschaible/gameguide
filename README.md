@@ -26,6 +26,7 @@ After that the app updates itself: when a new release is out it shows **Update a
 npm run setup
 npm start          # run from source
 npm test           # two-app end-to-end test (local PeerJS server)
+npm run test:unit  # state machines (docs/state-machines.md), Node only
 npm run package    # Mac arm64 + Windows x64 into dist/
 ```
 

@@ -49,10 +49,10 @@ const { check, skip, note } = r;
 
   if (!process.env.GG_NO_NET) {
     const u = await win.evaluate(() => window.bridge.checkUpdate());
-    const ok = !!u && u.enabled !== false && !u.error && !!u.latest;
+    const ok = !!u && u.enabled !== false && !u.error && !!u.latest && ['current', 'available', 'noAsset'].includes(u.state);
     const why = ok ? '' : (await win.evaluate(() => (window.__app.log || []).filter((l) => /update/i.test(l)).slice(-2).join(' | '))) || JSON.stringify(u);
     if (!ok && /rate limit/i.test(why)) skip('updater query', `GitHub's anonymous rate limit on this shared machine (${why.slice(0, 120)})`);
-    else check('updater can query releases', ok, ok ? JSON.stringify({ current: u.current, latest: u.latest, available: u.available }) : why);
+    else check('updater can query releases', ok, ok ? JSON.stringify({ state: u.state, current: u.current, latest: u.latest }) : why);
   }
   const n = app.windows().length;
   check('popup blocked', await win.evaluate(() => window.open('https://example.com/', '_blank') === null));

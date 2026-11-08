@@ -11,6 +11,8 @@ const {
 const path = require('path');
 const native = require('./native');
 const updater = require('./updater');
+const FSM = require('./renderer/fsm');
+const MACHINES = require('./machines'); // explicit state machines (docs/state-machines.md)
 const BRAND = require('./brand.json');
 const SCHEME = BRAND.id; // invite links: <id>://join/ABC123
 
@@ -18,7 +20,6 @@ let mainWin = null;
 let overlayWin = null;
 let selectedSourceId = null;
 let trackTimer = null;
-let overlayHidden = false;     // hidden by the player's hotkey
 let target = null;             // { kind: 'screen'|'window', sourceId, windowId, displayId }
 let lastTrackState = '';
 let overlayActive = false;     // marks or a toast are on screen right now
@@ -339,6 +340,24 @@ function sendLog(line) {
   if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('app:log', line);
 }
 
+// ---------- hide/show drawings (player hotkey), see DRAWINGS in machines.js ----------
+const drawings = FSM.createMachine(MACHINES.DRAWINGS, { log: sendLog });
+drawings.subscribe(({ to, event }) => {
+  if (event === 'RESET') return; // a share starting or ending: nothing to announce
+  const hiding = to === 'hiding';
+  if ((to === 'hiding' || to === 'shown') && event === 'TOGGLE') {
+    if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('overlay:hidden', hiding);
+    // A toast either way, so a stray key press is never silent.
+    if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('overlay:toast', hiding ? 'Drawings hidden (Ctrl/Cmd+Shift+H to show)' : 'Drawings on');
+  }
+  track();
+});
+function toggleDrawings() {
+  if (!overlayWin || overlayWin.isDestroyed()) return null;
+  drawings.send('TOGGLE');
+  return drawings.state;
+}
+
 function openOverlay(t) {
   target = {
     kind: t && t.kind === 'window' ? 'window' : 'screen',
@@ -346,7 +365,7 @@ function openOverlay(t) {
     windowId: t && t.kind === 'window' ? windowIdFromSourceId(t.id) : null,
     displayId: t && t.displayId,
   };
-  overlayHidden = false;
+  drawings.send('RESET');
   lastTrackState = '';
   ensureOverlay();
   setTimeout(boostProcesses, 1500);
@@ -440,7 +459,7 @@ let lastIdleCheck = 0;
 let focusOnly = false; // set from the player's stream settings
 function track() {
   if (!overlayWin || overlayWin.isDestroyed() || !target) return;
-  if (overlayHidden) { hideOverlay(); return; }
+  if (drawings.is('hidden')) { hideOverlay(); return; }
   if (!overlayActive) {
     // Nothing to draw: keep the overlay off screen and only check the
     // game window occasionally (for the status line).
@@ -496,17 +515,7 @@ function registerHotkeys() {
   tryReg('CommandOrControl+Shift+X', () => {
     if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('overlay:draw', { t: 'clear', local: true });
   });
-  tryReg('CommandOrControl+Shift+H', () => {
-    if (!overlayWin || overlayWin.isDestroyed()) return;
-    overlayHidden = !overlayHidden;
-    sendLog(`hotkey: drawings ${overlayHidden ? 'hidden' : 'shown'}`);
-    if (mainWin) mainWin.webContents.send('overlay:hidden', overlayHidden);
-    // Show a toast either way so a stray key press is never silent.
-    const hiding = overlayHidden;
-    overlayHidden = false;
-    overlayWin.webContents.send('overlay:toast', hiding ? 'Drawings hidden (Ctrl/Cmd+Shift+H to show)' : 'Drawings on');
-    if (hiding) setTimeout(() => { overlayHidden = true; track(); }, 2200);
-  });
+  tryReg('CommandOrControl+Shift+H', toggleDrawings);
   tryReg('CommandOrControl+Shift+M', () => {
     if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('overlay:toggleSound');
     if (mainWin) mainWin.webContents.send('overlay:toggleSound');
@@ -519,6 +528,7 @@ function closeOverlay() {
   trackTimer = null;
   target = null;
   overlayActive = false;
+  drawings.send('RESET'); // cancels a hide that was still showing its toast
   if (overlayWin && !overlayWin.isDestroyed()) overlayWin.close();
   overlayWin = null;
   ensureInDock();
@@ -591,7 +601,7 @@ app.whenReady().then(() => {
     if (isNew && msg.t !== 'react' && mainWin && !mainWin.isDestroyed()) {
       // Receipt for the friend: did this mark actually make it onto the screen?
       let state = 'shown';
-      if (overlayHidden) state = 'hidden';
+      if (!drawings.is('shown')) state = 'hidden'; // hidden, or hiding right now
       else if (lastTrackState === 'minimized' || lastTrackState === 'closed' || lastTrackState === 'away') state = lastTrackState;
       else if (!overlayWin.isVisible()) state = 'not-visible';
       mainWin.webContents.send('overlay:receipt', state);
@@ -640,31 +650,76 @@ app.whenReady().then(() => {
     return true;
   });
 
-  // ---- updates ----
-  let lastUpdate = null;
+  // ---- updates, see UPDATE in machines.js ----
+  // Every status sent to the page carries `state`. Checks never run during an
+  // install (they used to re-show "Update now" mid-download), one check runs at
+  // a time, and only one install can start.
+  const update = FSM.createMachine(MACHINES.UPDATE, { log: sendLog });
+  const INSTALLING = ['downloading', 'installing', 'restarting'];
+  let lastUpdate = null;  // last answer from GitHub
+  let lastError = '';
+  let inflight = null;
+  const status = (extra) => ({
+    ...(lastUpdate || { current: app.getVersion() }),
+    state: update.state,
+    ...(update.is('failed') && lastError ? { error: lastError } : {}),
+    ...extra,
+  });
   const pushUpdate = (u) => { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('update:status', u); };
   const checkUpdates = async (manual) => {
-    try {
-      lastUpdate = await updater.check();
-      if (lastUpdate.available || manual) pushUpdate(lastUpdate);
-    } catch (e) {
-      if (manual) pushUpdate({ error: String(e.message || e) });
-      sendLog(`update check failed: ${e.message || e}`);
+    if (update.is(...INSTALLING) || update.is('off')) {
+      const s = status();
+      if (manual) pushUpdate(s);
+      return s;
     }
-    return lastUpdate;
+    if (!inflight) {
+      const prev = update.state;
+      update.send('CHECK');
+      inflight = (async () => {
+        try {
+          lastUpdate = await updater.check();
+          lastError = '';
+          update.send(lastUpdate.enabled === false ? 'OFF' : lastUpdate.available ? 'FOUND' : lastUpdate.missingAsset ? 'NO_ASSET' : 'LATEST');
+          return '';
+        } catch (e) {
+          lastError = String(e.message || e);
+          update.send('CHECK_FAILED', { prev }); // keeps an offer that was already up
+          sendLog(`update check failed: ${lastError}`);
+          return lastError;
+        } finally { inflight = null; }
+      })();
+    }
+    const error = await inflight;
+    const s = error ? { ...status(), error } : status();
+    if (manual || (!error && update.is('available'))) pushUpdate(s);
+    return s;
   };
   ipcMain.handle('update:check', () => checkUpdates(true));
   ipcMain.handle('update:install', async () => {
-    if (!lastUpdate || !lastUpdate.available) await checkUpdates(true);
-    if (!lastUpdate || !lastUpdate.available) return { ok: false, error: 'No update available.' };
+    if (update.is(...INSTALLING)) return { ok: false, error: 'The update is already being installed.' };
+    if (!update.is('available')) await checkUpdates(true);
+    if (!update.is('available')) return { ok: false, error: 'No update available.' };
+    update.send('INSTALL');
+    pushUpdate(status());
     try {
-      await updater.install(lastUpdate, (p) => pushUpdate({ ...lastUpdate, progress: p }));
+      await updater.install(lastUpdate, (p) => {
+        update.send(p.stage === 'download' ? 'PROGRESS' : p.stage === 'unpack' ? 'UNPACK' : 'RESTART');
+        pushUpdate(status({ progress: p }));
+      });
       return { ok: true };
     } catch (e) {
-      sendLog(`update failed: ${e.message || e}`);
-      return { ok: false, error: String(e.message || e) };
+      lastError = String(e.message || e);
+      update.send('INSTALL_FAILED');
+      sendLog(`update failed: ${lastError}`);
+      pushUpdate(status());
+      return { ok: false, error: lastError };
     }
   });
+  // Read-only view of the main-process machines (Copy details, tests, agents).
+  ipcMain.handle('app:state', () => ({ drawings: drawings.snapshot(), update: update.snapshot() }));
+  // Main-process handle for tests and agents (Playwright app.evaluate / a debugger):
+  // global.__gg.machines.update.state, global.__gg.toggleDrawings()
+  global.__gg = { machines: { drawings, update }, toggleDrawings };
 
   if (app.isPackaged) {
     try { app.setAsDefaultProtocolClient(SCHEME); } catch { /* ignore */ }

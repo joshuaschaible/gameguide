@@ -1,6 +1,6 @@
-// Viewer leaves without a clean close: (A) silent on every path, (B) goodbye only on the video path.
-// Two Chromium pages: player shares a fake "screen" (animated canvas), friend joins by code,
-// draws, and we verify the strokes reach the player's overlay channel.
+// Session edge cases, two Chromium pages over a local pairing server:
+//  (A) viewer goes silent on every path, (B) viewer's goodbye only arrives on the video path,
+//  (C) player ends while the capture is still starting.
 const { chromium } = require('playwright');
 const { PeerServer } = require('peer');
 const http = require('http');
@@ -34,8 +34,8 @@ const stub = (name) => `
       {kind:'window', id:'window:111:0', name:'WARDOGS', displayId:'', thumb:'data:image/gif;base64,R0lGODlhAQABAAAAACw=', icon:''},
       {kind:'screen', id:'screen:1:0', name:'Whole screen', displayId:'1', thumb:'data:image/gif;base64,R0lGODlhAQABAAAAACw=', icon:''}] }),
     selectSource: async (id) => { window.__sel = id; return true; },
-    openOverlay: async (t) => { window.__overlay = t; return true; },
-    closeOverlay: async () => true,
+    openOverlay: async (t) => { window.__overlay = t; window.__overlayOpen = true; return true; },
+    closeOverlay: async () => { window.__overlayOpen = false; return true; },
     draw: (m) => { window.__drawn.push(m); if ((m.t === 'start' || m.t === 'ping') && window.__rc) window.__rc(window.__rcState || 'shown'); },
     onReceipt: (fn) => { window.__rc = fn; },
     onDraw: () => {},
@@ -46,16 +46,19 @@ const stub = (name) => `
     openScreenSettings: async () => true,
   };
   navigator.mediaDevices.getDisplayMedia = async () => {
+    if (window.__slowCapture) await new Promise((r) => setTimeout(r, window.__slowCapture));
     const isWin = String(window.__sel || '').startsWith('window:');
     const c = document.createElement('canvas'); c.width = isWin ? 1280 : 1920; c.height = isWin ? 720 : 1080;
     const x = c.getContext('2d'); let f = 0;
     window.__fake = setInterval(() => { x.fillStyle = '#204'; x.fillRect(0,0,c.width,c.height); x.fillStyle='#0f0'; x.fillRect((f++*8)%c.width, 300, 80, 80); }, 33);
-    return c.captureStream(30);
+    const s = c.captureStream(30);
+    window.__lastStream = s;
+    return s;
   };
 `;
 
 const reporter = require('./report.cjs');
-const rep = reporter('Viewer leaves without a clean close');
+const rep = reporter('Session edge cases');
 const { check } = rep;
 
 (async () => {
@@ -101,6 +104,7 @@ const { check } = rep;
     check('A: video call closed', await player.evaluate(() => !window.__app.call));
     check('A: player status says the friend left', /left/.test(await player.textContent('#share-status')));
     check('A: invite + button is back', await player.evaluate(() => !document.getElementById('invite-wrap').hidden));
+    check('A: player phase back to waiting', await player.evaluate(() => window.__app.phase) === 'host.waiting');
     await player.context().close(); await friend.context().close();
   }
   // B: drawing link already dead, friend clicks End session -> goodbye arrives on the video path
@@ -116,7 +120,32 @@ const { check } = rep;
     const secsB = (Date.now() - t0) / 1000;
     check('B: goodbye on the video path is noticed quickly', goneB && secsB < 5, `${secsB.toFixed(1)} s`);
     check('B: player status says the friend left', /left/.test(await player.textContent('#share-status')));
+    check('B: session phases', await player.evaluate(() => window.__app.phase) === 'host.waiting' && await friend.evaluate(() => window.__app.phase) === 'idle');
     await player.context().close(); await friend.context().close();
+  }
+  // C: player clicks End while the capture is still starting (slow permission prompt):
+  //    no overlay may open afterwards and the capture must stop.
+  {
+    const player = await mk('Joshua');
+    await player.evaluate(() => { window.__slowCapture = 1500; });
+    await player.click('#go-share'); await player.waitForSelector('.picker:not(.loading) .pick:not(.skel)'); await player.click('.pick:not(.skel)');
+    await player.waitForTimeout(300);
+    const mid = await player.evaluate(() => ({ phase: window.__app.phase, end: !document.getElementById('end').hidden }));
+    check('C: End is offered while the capture starts', mid.phase === 'host.capturing' && mid.end, JSON.stringify(mid));
+    await player.click('#end'); await player.click('#end-yes');
+    await player.waitForTimeout(2500);
+    const after = await player.evaluate(() => ({
+      phase: window.__app.phase,
+      overlayOpen: !!window.__overlayOpen,
+      liveTracks: window.__lastStream ? window.__lastStream.getTracks().filter((t) => t.readyState === 'live').length : -1,
+      home: !document.getElementById('step-role').hidden,
+    }));
+    check('C: nothing keeps running after End', after.phase === 'idle' && !after.overlayOpen && after.liveTracks === 0 && after.home, JSON.stringify(after));
+    await player.evaluate(() => { window.__slowCapture = 0; });
+    await player.click('#go-share'); await player.waitForSelector('.picker:not(.loading) .pick:not(.skel)'); await player.click('.pick:not(.skel)');
+    const ok = await player.waitForFunction(() => /^[A-Z0-9]{6}$/.test(document.getElementById('code').textContent), null, { timeout: 15000 }).then(() => true, () => false);
+    check('C: sharing again right after works', ok && await player.evaluate(() => window.__app.phase === 'host.waiting' && window.__overlayOpen === true));
+    await player.context().close();
   }
   const real = errors.filter((e) => !/PeerJS|WebSocket|Refused to connect to 'data:/.test(e));
   check('no page errors', !real.length, real.slice(0, 3).join(' | '));

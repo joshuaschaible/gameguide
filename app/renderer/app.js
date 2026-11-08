@@ -66,7 +66,6 @@
     stream: null,        // player's captured screen
     code: null,
     friend: null,
-    ended: true,
     timers: [],
     log: [],
     info: { version: '?', platform: navigator.platform, arch: '' },
@@ -79,11 +78,30 @@
     console.log('[app]', msg);
   }
 
+  // ---------- session phase: one explicit state machine ----------
+  // app/renderer/session-machine.js lists every phase and move (drawn in
+  // docs/state-machines.md). S.ended, S.relinking and S.phase are read from it;
+  // nothing assigns them. Change S.* first, then send the event.
+  const session = window.FSM.createMachine(window.SessionMachine.SESSION, { log });
+  Object.defineProperties(S, {
+    ended: { get: () => session.is('idle'), enumerable: true },
+    relinking: { get: () => session.is('viewer.relinking'), enumerable: true },
+    phase: { get: () => session.state, enumerable: true },
+  });
+  S.machines = { session }; // window.__app.machines.session.snapshot() for tests and agents
+  session.subscribe(() => renderPhase());
+  // Header controls that depend only on the phase.
+  function renderPhase() {
+    $('end').hidden = S.ended;
+    updateInviteBtn();
+    updateConn();
+  }
+
   // ---------- views ----------
   const STEPS = ['step-name', 'step-role', 'step-share', 'step-join', 'step-watch'];
   function show(id) {
     for (const s of STEPS) $(s).hidden = s !== id;
-    $('end').hidden = !['step-share', 'step-watch'].includes(id) && !(id === 'step-join' && !S.ended);
+    $('end').hidden = S.ended;
     $('tools').hidden = id !== 'step-watch';
     $('share-tools').hidden = id !== 'step-share';
     updateInviteBtn();
@@ -103,8 +121,7 @@
   // who is streaming/watching, and which one is you.
   // The "+" next to the avatars: invite someone. Only while nobody has joined.
   function updateInviteBtn() {
-    const friendIn = !!(S.peerProfile || (S.conn && S.conn.open));
-    const show = S.role === 'share' && !S.ended && !$('step-share').hidden && !friendIn;
+    const show = session.is('host.capturing', 'host.registering', 'host.waiting') && !$('step-share').hidden;
     $('invite-wrap').hidden = !show;
     if (!show) { $('invite-menu').classList.remove('open'); $('invite-btn').setAttribute('aria-expanded', 'false'); }
   }
@@ -318,7 +335,7 @@
   function later(ms, fn) { const t = setTimeout(fn, ms); S.timers.push(t); return t; }
 
   function teardown() {
-    S.ended = true;
+    session.send('RESET'); // from any phase; bumps session.epoch
     clearTimers();
     clearInterval(S.statsTimer);
     clearInterval(S.linkWatch);
@@ -326,8 +343,18 @@
     S.videoDownSince = null;
     stopHeartbeat();
     clearTimeout(S.relinkTimer);
-    S.relinking = false;
     S.relinkTries = 0;
+    // Throttles and one-shot flags belong to one session (a pending retry's
+    // timer was just cleared, so its flag must go too).
+    S.videoRetryPending = false;
+    S.lastStillFix = 0;
+    S.netPrev = null;
+    S.noPathLogged = false;
+    S.quietLogged = false;
+    S.dataDiscAt = null;
+    lastRestart = 0;
+    restarting = false;
+    lastVideoRestart = 0;
     S.peerHb = false;
     S.awaitRelink = null;
     S.native = null;
@@ -1105,9 +1132,11 @@
 
   async function startSharing(source, opts) {
     teardown();
-    S.ended = false;
     S.role = 'share';
     S.source = source;
+    session.send('SHARE');
+    const ep = session.epoch;
+    const gone = () => ep !== session.epoch; // ended (or restarted) while we waited
     show('step-share');
     setCodeBoxes('');
     $('copy-code').disabled = true; $('copy-invite').disabled = true;
@@ -1116,17 +1145,21 @@
     setStatus($('share-status'), 'Starting capture…', 'busy');
     try {
       const c = await captureSource(source);
+      if (gone()) { c.stream.getTracks().forEach((t) => t.stop()); return; }
       S.stream = c.stream;
       S.native = c.native;
     } catch (e) {
+      if (gone()) return;
       log(`capture failed: ${e && e.name} ${e && e.message}`);
       endSession(`Capture was blocked. On a Mac, allow ${NAME} under Screen & System Audio Recording, then quit and reopen it.`);
       return;
     }
     showSourceName(source);
     await applyCaptureQuality();
+    if (gone()) return; // never open the overlay for a session that already ended
     await bridge.openOverlay({ kind: source.kind, id: source.id, displayId: source.displayId });
     S.overlayTargetId = source.id;
+    session.send('CAPTURED');
     openHostPeer(0, opts && opts.code);
   }
 
@@ -1152,8 +1185,10 @@
   // when changing display mode). Look for a window with the same title.
   async function reattachWindow(source, attempt) {
     if (S.ended || S.role !== 'share') return;
+    const ep = session.epoch;
     let res = null;
     try { res = await bridge.listSources(); } catch { /* ignore */ }
+    if (ep !== session.epoch) return;
     const match = res && res.sources.find((x) => x.kind === 'window' && x.name === source.name);
     if (match) {
       log(`found "${source.name}" again, reattaching`);
@@ -1171,20 +1206,25 @@
 
   async function replaceCapture(source, silent) {
     if (S.ended || S.role !== 'share') return;
+    const ep = session.epoch;
+    const gone = () => ep !== session.epoch; // the session ended while we waited
     if (!silent) log(`switching source to "${source.name}"`);
     let c;
     try {
       c = await captureSource(source);
     } catch (e) {
+      if (gone()) return;
       log(`capture failed: ${e && e.name} ${e && e.message}`);
       if (!silent) setStatus($('share-status'), `Couldn't capture "${source.name}". Still sharing the previous source.`, 'bad');
       return;
     }
+    if (gone()) { c.stream.getTracks().forEach((t) => t.stop()); return; }
     const old = S.stream;
     S.stream = c.stream;
     S.native = c.native;
     S.source = source;
     await applyCaptureQuality();
+    if (gone()) { [old, c.stream].forEach((st) => st && st.getTracks().forEach((t) => t.stop())); return; }
     const newTrack = c.stream.getVideoTracks()[0];
     const pc = S.call && S.call.peerConnection;
     if (pc) {
@@ -1196,6 +1236,7 @@
     }
     if (old) old.getTracks().forEach((t) => t.stop());
     freeze.reset();
+    if (gone()) return;
     const sameTarget = silent && S.overlayTargetId === source.id;
     if (!sameTarget) {
       await bridge.openOverlay({ kind: source.kind, id: source.id, displayId: source.displayId });
@@ -1254,6 +1295,7 @@
       setCodeBoxes(S.code);
       $('copy-code').disabled = false; $('copy-invite').disabled = false;
       setStatus($('share-status'), 'Waiting for your friend to enter the code…', 'busy');
+      session.send('REGISTERED');
     });
     peer.on('connection', (conn) => onViewerConnection(conn));
     keepSignaling(peer);
@@ -1294,6 +1336,7 @@
           if (S.ended || S.peer !== peer) return;
           if (S.conn && S.conn.open) { if (!peer.destroyed) peer.reconnect(); return; }
           peer.destroy();
+          session.send('OFFLINE'); // a new code is on the way
           openHostPeer(attempt + 1);
         });
         return;
@@ -1334,21 +1377,20 @@
   // Viewer, last resort: start the session over with the same code (like
   // typing it in again). Used when the video connection stays down.
   function autoRejoin(why) {
-    if (S.role !== 'join' || S.ended || S.autoRejoining || !S.code) return;
-    S.autoRejoining = true;
+    if (S.role !== 'join' || S.ended || session.is('viewer.rejoining') || !S.code) return;
     const code = S.code;
     const friend = S.friend;
     log(`${why}; rejoining the session`);
     teardown();
+    session.send('REJOIN');
     show('step-join');
     $('join-code').value = code;
-    $('end').hidden = false;
     setStatus($('join-status'), `Reconnecting to ${friend || 'your friend'}…`, 'busy');
-    setTimeout(() => {
-      S.autoRejoining = false;
+    later(1500, () => { // cancelled by End / Back (teardown clears it)
+      if (!session.is('viewer.rejoining')) return;
       if ($('step-join').hidden || $('join-code').value !== code) return; // user left meanwhile
       joinFriend(code, { rejoinUntil: Date.now() + 90000, friend });
-    }, 1500);
+    });
   }
 
   // ---------- second path for drawings: inside the video connection ----------
@@ -1449,6 +1491,7 @@
     const viewerName = (conn.metadata && String(conn.metadata.name || '').slice(0, 24)) || 'Your friend';
     log('viewer reached us through pairing service, opening direct connection');
     setStatus($('share-status'), `${viewerName} found you. Connecting…`, 'busy');
+    session.send('VIEWER_FOUND');
     watchPc(conn.peerConnection, 'data');
 
     const openTimer = later(30000, () => {
@@ -1457,6 +1500,7 @@
         setStatus($('share-status'), `Couldn't connect to ${viewerName}. Ask them to try again. If it keeps failing, open Settings > Advanced and turn on "Always use the backup connection" on both computers.`, 'bad');
         try { conn.close(); } catch { /* ignore */ }
         S.conn = null;
+        session.send('LINK_TIMEOUT');
       }
     });
 
@@ -1477,6 +1521,7 @@
       $('share-title').textContent = `${viewerName} is watching`;
       setShareLive(true);
       setStatus($('share-status'), `Connected. ${viewerName} can see your screen and draw on it.`, 'good');
+      session.send('LINK_OPEN');
       later(4000, async () => {
         const r = await describeRoute(call.peerConnection);
         if (r) {
@@ -1506,6 +1551,7 @@
       startHeartbeat();
       log('drawing link rebuilt');
       conn.send(myProfileMsg());
+      session.send('RELINKED');
       later(4000, async () => {
         const d = await describeRoute(conn.peerConnection);
         if (d) log(`drawing route: ${d.label} (${d.local} → ${d.remote}, rtt ${d.rtt}ms)`);
@@ -1558,6 +1604,7 @@
       S.awaitRelink = { peer: conn.peer };
       clearTimeout(S.relinkTimer);
       S.relinkTimer = setTimeout(() => { if (S.awaitRelink && !S.conn) viewerGone(); }, 20000);
+      session.send('LINK_LOST');
       return;
     }
     viewerGone();
@@ -1582,6 +1629,7 @@
     clearInterval(S.statsTimer);
     $('q-stats').textContent = '';
     $('q-hint').textContent = '';
+    session.send('VIEWER_GONE'); // after S.conn/S.peerProfile are cleared, so "+ invite" comes back
     if (S.ended) return;
     $('share-title').textContent = 'Invite your friend';
     setShareLive(false);
@@ -1674,6 +1722,7 @@
       return;
     }
     lastVideoRestart = now;
+    const ep = session.epoch;
     const kind = (opts && opts.kind) || 'network';
     if (kind === 'encoder') {
       // The encoder itself keeps hanging: fall back to the most robust codec.
@@ -1696,12 +1745,13 @@
     if (opts && opts.freshCapture && S.source) {
       try { await replaceCapture(S.source, true); } catch { /* ignore */ }
     }
+    if (ep !== session.epoch) return;
     const old = S.call;
     if (S.peer && S.peer.disconnected && !S.peer.destroyed) {
       try { S.peer.reconnect(); } catch { /* ignore */ }
       await new Promise((r) => setTimeout(r, 1500));
     }
-    if (!S.conn || S.ended) return; // drawing link went away while we waited
+    if (!S.conn || ep !== session.epoch) return; // drawing link or session went away while we waited
     startVideoCall(S.conn);
     if (old) setTimeout(() => { try { old.close(); } catch { /* ignore */ } }, 500);
     if (S.conn.open) S.conn.send({ t: 'stat', restarting: true });
@@ -1732,11 +1782,10 @@
       return;
     }
     teardown();
-    S.ended = false;
     S.role = 'join';
     S.code = code;
+    session.send('JOIN');
     $('join-btn').disabled = true;
-    $('end').hidden = false;
     setStatus($('join-status'), 'Connecting…', 'busy');
     log('opening viewer peer');
     const peer = new window.Peer(peerOptions());
@@ -1748,19 +1797,17 @@
         log(`rejoin attempt failed (${text}); trying again`);
         const who = (opts && opts.friend) || 'your friend';
         teardown();
-        S.ended = false;
         S.role = 'join';
+        session.send('REJOIN');
         show('step-join');
         $('join-code').value = code;
-        $('end').hidden = false;
         setStatus($('join-status'), `Waiting for ${who} to come back (updating)…`, 'busy');
-        later(4000, () => { if (!S.ended && S.role === 'join') joinFriend(code, opts); });
+        later(4000, () => { if (session.is('viewer.rejoining')) joinFriend(code, opts); });
         return;
       }
       log(`join failed: ${text}`);
       teardown();
       $('join-btn').disabled = false;
-      $('end').hidden = true;
       show('step-join');
       setStatus($('join-status'), text, 'bad');
     };
@@ -1771,7 +1818,6 @@
       teardown();
       $('join-btn').disabled = false;
       show('step-join');
-      $('end').hidden = true;
       setStatus($('join-status'), `${S.friend || 'Your friend'} ended the session.`, '');
     };
     const videoAlive = () => {
@@ -1798,13 +1844,14 @@
           if (d) log(`drawing route: ${d.label} (${d.local} → ${d.remote}, rtt ${d.rtt}ms)`);
         });
         if (relink) {
-          S.relinking = false;
           S.relinkTries = 0;
           log('drawing link rebuilt');
+          session.send('RELINKED', { video: !!$('video').srcObject });
           return;
         }
         log('data channel open, waiting for video');
         setStatus($('join-status'), 'Connected. Waiting for video…', 'busy');
+        session.send('LINK_OPEN');
         later(20000, () => {
           if (S.conn === conn && conn.open && !$('video').srcObject) fail('Connected, but no video arrived. Ask your friend to end the session and share again.');
         });
@@ -1850,8 +1897,8 @@
     // Opens a fresh drawing link to the player; video is left alone.
     const relinkData = (why) => {
       if (S.ended || S.peer !== peer || peer.destroyed) return;
-      S.relinking = true;
       S.relinkTries = (S.relinkTries || 0) + 1;
+      session.send('RELINK');
       log(`drawing link ${why}, reconnecting it (try ${S.relinkTries})`);
       const go = () => {
         if (S.ended || S.peer !== peer || peer.destroyed) return;
@@ -1928,6 +1975,7 @@
         v.play().catch(() => {});
         show('step-watch');
         $('watch-status').textContent = `Watching ${S.friend || 'your friend'}`;
+        session.send('VIDEO');
         startStatsLoop();
         later(4000, async () => {
           const r = await describeRoute(call.peerConnection);
@@ -2575,8 +2623,14 @@
 
   // details
   async function buildDetails() {
+    const ago = (ms) => (ms < 1000 ? `${ms} ms` : `${Math.round(ms / 1000)} s`);
+    const machineLine = (snap) => `${snap.id}: ${snap.state} for ${ago(snap.forMs)}${snap.history.length ? ` · recent: ${snap.history.filter((h) => !h.ignored).slice(-4).map((h) => `${h.event}->${h.to}`).join(', ')}` : ''}`;
+    let mainState = null;
+    try { mainState = bridge.state ? await bridge.state() : null; } catch { /* older main */ }
     const lines = [
       `${NAME} ${S.info.version} · ${S.info.platform}/${S.info.arch}`,
+      `State: ${machineLine(session.snapshot(8))}`,
+      ...(mainState ? [`State: ${machineLine(mainState.update)}`, `State: ${machineLine(mainState.drawings)}`] : []),
       `Role: ${S.role || 'none'} · signaling: ${S.peer ? (S.peer.disconnected ? 'disconnected' : 'connected') : 'not started'}`,
       `Drawing link: ${S.conn ? (S.conn.open ? 'open' : 'not open') : 'none'}${S.conn && S.conn.peerConnection ? ` (ICE ${S.conn.peerConnection.iceConnectionState})` : ''}${S.lastHeard && S.conn ? ` · last heard ${Math.round((Date.now() - S.lastHeard) / 1000)} s ago` : ''}${S.peerHb ? ' · heartbeat on' : ''}${S.relinking ? ' · reconnecting' : ''} · video: ${S.call ? (S.call.open ? 'open' : 'pending') : 'none'}`,
       `Relay only: ${store.get('app.relayOnly', false)} · custom TURN: ${store.get('app.turn', null) ? 'yes' : 'no'}`,
@@ -2674,10 +2728,7 @@
     log(`invite link opened for ${code}`);
     const busy = !S.ended && (S.role === 'share' || (S.role === 'join' && S.conn && S.conn.open));
     if (busy) {
-      const bar = $('update-bar');
-      bar.hidden = false; bar.classList.remove('bad');
-      $('update-btn').hidden = true;
-      $('update-text').textContent = `Got an invite (${code}). End your current session first, then click the link again.`;
+      showNotice(`Got an invite (${code}). End your current session first, then click the link again.`);
       return;
     }
     if (!S.name) {
@@ -2693,47 +2744,76 @@
   if (bridge.onInvite) bridge.onInvite(handleInvite);
 
   // ---------- updates ----------
+  // The bar shows the main process's update machine (UPDATE in app/machines.js):
+  // every status carries `state`. A one-off notice (e.g. an invite that arrives
+  // mid-session) can use the bar too; dismissing it brings the update back.
+  let lastUpdateStatus = null;
+  let noticeUp = false;
+  // Older statuses had no `state`: work it out from the fields.
+  const updateState = (u) => (u.state || (u.error ? 'failed' : u.progress ? ({ download: 'downloading', unpack: 'installing' }[u.progress.stage] || 'restarting')
+    : u.available ? 'available' : u.enabled === false ? 'off' : u.missingAsset ? 'noAsset' : 'current'));
   function showUpdate(u) {
+    if (!u) return;
+    lastUpdateStatus = u;
+    noticeUp = false;
     const bar = $('update-bar');
     const btn = $('update-btn');
-    bar.classList.remove('bad');
-    if (!u) return;
-    if (u.error) {
-      bar.hidden = false; bar.classList.add('bad');
-      $('update-text').textContent = `Update problem: ${u.error}`;
-      btn.hidden = true;
-      return;
-    }
-    if (u.progress) {
-      bar.hidden = false; btn.hidden = true;
-      const p = u.progress;
-      if (p.stage === 'restart') { saveResume(); tellPeerUpdating(); }
-      $('update-text').textContent = p.stage === 'download' ? `Downloading v${u.latest}… ${Math.round(p.progress * 100)}%`
-        : p.stage === 'unpack' ? `Installing v${u.latest}…` : `Restarting into v${u.latest}…`;
-      return;
-    }
-    if (u.available) {
-      bar.hidden = false; btn.hidden = false; btn.disabled = false;
-      $('update-text').textContent = `${NAME} v${u.latest} is available (you have v${u.current}).${S.ended ? '' : ' Your session reconnects by itself after the update.'}`;
-      return;
-    }
-    if (u.enabled === false) {
-      bar.hidden = true;
-    } else if (u.missingAsset) {
-      bar.hidden = false; btn.hidden = true;
-      $('update-text').textContent = `v${u.latest} is out, but not for this computer yet (${u.missingAsset} missing).`;
-    } else {
-      bar.hidden = true;
+    const text = $('update-text');
+    const st = updateState(u);
+    bar.classList.toggle('bad', st === 'failed');
+    btn.hidden = st !== 'available';
+    switch (st) {
+      case 'available':
+        bar.hidden = false; btn.disabled = false;
+        text.textContent = `${NAME} v${u.latest} is available (you have v${u.current}).${S.ended ? '' : ' Your session reconnects by itself after the update.'}`;
+        break;
+      case 'downloading':
+        bar.hidden = false;
+        text.textContent = `Downloading v${u.latest}… ${Math.round(((u.progress && u.progress.progress) || 0) * 100)}%`;
+        break;
+      case 'installing':
+        bar.hidden = false;
+        text.textContent = `Installing v${u.latest}…`;
+        break;
+      case 'restarting':
+        saveResume(); tellPeerUpdating();
+        bar.hidden = false;
+        text.textContent = `Restarting into v${u.latest}…`;
+        break;
+      case 'failed':
+        bar.hidden = false;
+        text.textContent = `Update problem: ${u.error || 'unknown error'}`;
+        break;
+      case 'noAsset':
+        bar.hidden = false;
+        text.textContent = `v${u.latest} is out, but not for this computer yet (${u.missingAsset} missing).`;
+        break;
+      default: // current, off, idle
+        bar.hidden = true;
     }
   }
+  function showNotice(message) {
+    const bar = $('update-bar');
+    bar.hidden = false; bar.classList.remove('bad');
+    $('update-btn').hidden = true;
+    $('update-text').textContent = message;
+    noticeUp = true;
+  }
   if (bridge.onUpdate) bridge.onUpdate(showUpdate);
-  $('update-dismiss').addEventListener('click', () => { $('update-bar').hidden = true; });
+  $('update-dismiss').addEventListener('click', () => {
+    // Dismissing a notice brings back a pending update offer instead of losing it.
+    if (noticeUp && lastUpdateStatus && ['available', 'downloading', 'installing', 'restarting'].includes(updateState(lastUpdateStatus))) { showUpdate(lastUpdateStatus); return; }
+    noticeUp = false;
+    $('update-bar').hidden = true;
+  });
   $('check-updates').addEventListener('click', async () => {
     closeMenus();
     toast('Checking for updates…', 'busy');
     try {
       const u = await bridge.checkUpdate();
+      const st = u && updateState(u);
       if (!u || u.error) toast(`Couldn't check for updates: ${(u && u.error) || 'no answer'}`, 'bad');
+      else if (['downloading', 'installing', 'restarting'].includes(st)) toast(`Installing v${u.latest} now.`);
       else if (u.enabled === false) toast('Updates are off in this build.');
       else if (u.available) toast(`Version ${u.latest} is available. Use "Update now" at the top.`);
       else if (u.missingAsset) toast(`Version ${u.latest} is out, but not for this computer yet.`);
@@ -2761,7 +2841,7 @@
     log('installing update');
     saveResume();
     const r = await bridge.installUpdate();
-    if (r && !r.ok) { try { localStorage.removeItem('app.resume'); } catch { /* ignore */ } showUpdate({ error: r.error }); }
+    if (r && !r.ok) { try { localStorage.removeItem('app.resume'); } catch { /* ignore */ } showUpdate({ ...(lastUpdateStatus || {}), state: 'failed', error: r.error }); }
   });
 
   // After an update restart: pick the session back up (same code, same window).
