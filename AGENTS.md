@@ -32,7 +32,7 @@ Electron app. A player shares a game window; a friend watches over WebRTC (PeerJ
 
 | Command | What | Time |
 |---|---|---|
-| `npm run test:unit` | State machines as plain data (Node only) | ~3 s |
+| `npm run test:unit` | State machines and the release plan (Node only) | ~3 s |
 | `npm test` | End-to-end: two Chromium pages + a local pairing server | ~4 min |
 | `npm run test:edge` | Session edge cases: silent viewer, goodbye on the video path, End during capture start | ~1 min |
 | `npm run test:electron` | Real Electron: capture, overlay, hotkeys, security guards (Linux: `xvfb-run -a`) | ~1 min |
@@ -41,8 +41,15 @@ Electron app. A player shares a game window; a friend watches over WebRTC (PeerJ
 
 Every test prints PASS/FAIL/SKIP lines and exits 1 on any FAIL. `.github/workflows/tests.yml` runs them on Linux, Windows and macOS; each job's summary lists every check, and the job annotations carry the same list (readable with `gh api .../check-runs/<job>/annotations`).
 
+## Shipping
+
+Every push to `main` goes to players automatically (about 20 minutes) once Tests pass on Linux, Windows and macOS, unless only docs, tests or CI changed. Patch versions count up by themselves; bump `app/package.json` only for a new major/minor.
+
+- Work on a branch. Push or merge to `main` only when the owner asks to merge or deploy.
+- Don't push tags or start the Release workflow yourself.
+- `node scripts/release-plan.mjs [sha]` shows what a commit would ship as (read-only).
+
 ## Don't
 
 - No OBS or other dependency, no game injection or hooking (anti-cheat risk). The app is standalone.
-- Releases only go out through the Release workflow's "Run workflow" button, clicked by a person.
 - Never commit signing keys or tokens.

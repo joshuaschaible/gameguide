@@ -1,6 +1,12 @@
-# Builds the Windows and Mac apps on GitHub's machines and publishes a
-# release whenever a version tag is pushed (git tag v1.5.1 && git push --tags).
-# The in-app updater picks the release up automatically.
+# Ships every push to main. When the Tests workflow passes on a push to main
+# (Linux, Windows and macOS), this builds the Windows and Mac apps and publishes
+# a GitHub release; installed copies update themselves within minutes.
+#
+# scripts/release-plan.mjs decides (run it locally to see what would happen):
+#  - version: next patch after the latest release (1.13.0 -> 1.13.1 ...);
+#    bump app/package.json above it to start a new line (1.14.0)
+#  - skipped when only docs/tests/CI changed, or a newer push is on its way
+# Failing tests never ship. "Run workflow" (by hand) still works.
 #
 # Secrets (Settings > Secrets and variables > Actions):
 #   MAC_SIGN_CERT  contents of gameguide-signing.crt  (homemade Mac certificate)
@@ -9,33 +15,48 @@
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# One release at a time; a newer push waits for the one in progress.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  # Stops right away (before building) if this version was already released,
-  # e.g. when Run workflow is clicked twice. Bump app/package.json to release again.
-  check:
+  plan:
+    # Only a green test run of a push to main (never a pull request), or a manual run.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
-      - name: Version not released yet
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Decide version (or skip)
+        id: plan
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION=$(node -p "require('./app/package.json').version")
-          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error title=Already released::v$VERSION is already released. Nothing new to publish (bump the version in app/package.json first)."
-            exit 1
-          fi
-          echo "Releasing v$VERSION"
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+        run: node scripts/release-plan.mjs
 
   build:
-    needs: check
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
     strategy:
       matrix:
         include:
@@ -46,6 +67,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -54,6 +77,9 @@ jobs:
       - name: Install app dependencies
         working-directory: app
         run: npm ci --omit=dev --no-audit --no-fund
+      - name: Stamp version ${{ needs.plan.outputs.version }}
+        working-directory: app
+        run: npm version ${{ needs.plan.outputs.version }} --no-git-tag-version --allow-same-version
       - name: Check hidden updater helper (Windows)
         if: matrix.platform == 'win32'
         run: node scripts/check-windows.cjs
@@ -104,10 +130,12 @@ jobs:
           path: release/*.zip
 
   publish:
-    needs: build
+    needs: [plan, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
       - uses: actions/download-artifact@v4
         with:
           path: release
@@ -115,7 +143,8 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          SHA: ${{ needs.plan.outputs.sha }}
         run: |
-          VERSION=$(node -p "require('./app/package.json').version")
           NAME=$(node -p "require('./app/brand.json').name")
-          gh release create "v$VERSION" release/*.zip --title "$NAME v$VERSION" --generate-notes
+          gh release create "v$VERSION" release/*.zip --target "$SHA" --title "$NAME v$VERSION" --generate-notes

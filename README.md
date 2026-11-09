@@ -34,13 +34,11 @@ The product name, link scheme, app ID and GitHub repo live in `app/brand.json`; 
 
 ## Releasing
 
-Bump `version` in `app/package.json`, commit, then:
+Every push to `main` ships. When the Tests workflow passes on Linux, Windows and macOS, `.github/workflows/release.yml` builds both apps, signs the Mac app with the certificate in the `MAC_SIGN_CERT` / `MAC_SIGN_KEY` repo secrets (so macOS keeps its permissions across updates), and publishes the release. Installed copies pick it up within a couple of minutes: about 20 minutes from push to players.
 
-```sh
-git tag v1.5.1 && git push --tags
-```
-
-GitHub Actions (`.github/workflows/release.yml`) builds both apps, signs the Mac app with the certificate in the `MAC_SIGN_CERT` / `MAC_SIGN_KEY` repo secrets (so macOS keeps its permissions across updates), and publishes the release. Installed copies pick it up within a couple of minutes. It can also be run by hand from the Actions tab.
+- Patch versions count up by themselves (1.13.0, 1.13.1, ...). Bump `version` in `app/package.json` to start a new line (1.14.0).
+- Pushes that only touch docs, tests or CI don't ship. Failing tests never ship.
+- `node scripts/release-plan.mjs` shows what the current commit would ship as. Run workflow (Actions tab) ships the next patch by hand.
 
 The invite page (`site/join/`) is published to GitHub Pages by `.github/workflows/pages.yml`.
 
